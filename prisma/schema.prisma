@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum InputType {
+  PASTE_CODE
+  BASE_ADDRESS
+}
+
+enum AnalysisStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  DONE_WITH_WARNINGS
+  FAILED
+  PARTIAL
+}
+
+enum Visibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+model User {
+  id               String            @id @default(uuid())
+  walletAddress    String            @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sessions         Session[]
+  analysisRequests AnalysisRequest[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String            @id @default(uuid())
+  sessionId        String            @unique
+  userId           String?
+  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  expiresAt        DateTime
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  analysisRequests AnalysisRequest[] @relation("SessionAnalyses")
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AnalysisRequest {
+  id                 String         @id @default(uuid())
+  inputType          InputType
+  chainId            Int
+  inputHash          String
+  sourceHash         String?
+  status             AnalysisStatus @default(QUEUED)
+  errorCode          String?
+  requesterUserId    String?
+  requesterUser      User?          @relation(fields: [requesterUserId], references: [id], onDelete: SetNull)
+  requesterSessionId String
+  requesterSession   Session        @relation("SessionAnalyses", fields: [requesterSessionId], references: [sessionId], onDelete: Restrict)
+  sourceBundle       SourceBundle?
+  report             Report?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([inputHash, requesterUserId])
+  @@index([inputHash, requesterSessionId])
+  @@index([status, createdAt])
+  @@index([requesterUserId, createdAt])
+  @@index([requesterSessionId, createdAt])
+  @@map("analysis_requests")
+}
+
+model SourceBundle {
+  id             String          @id @default(uuid())
+  analysisId     String          @unique
+  analysis       AnalysisRequest @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  sourceJson     Json
+  sourceMetaJson Json
+  lineCount      Int
+  isVerifiedSource Boolean
+  createdAt      DateTime        @default(now())
+
+  @@map("source_bundles")
+}
+
+model Report {
+  id               String          @id @default(uuid())
+  analysisId       String          @unique
+  analysis         AnalysisRequest @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  visibility       Visibility      @default(PRIVATE)
+  privateTokenHash String?
+  reportJson       Json
+  reportHash       String
+  topSeverity      Severity        @default(INFO)
+  findings         Finding[]
+  receipt          Receipt?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([visibility, createdAt])
+  @@index([reportHash])
+  @@map("reports")
+}
+
+model Finding {
+  id               String   @id @default(uuid())
+  reportId         String
+  report           Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  severity         Severity
+  title            String
+  confidence       Int
+  needsManualCheck Boolean  @default(false)
+  fingerprint      String
+  locationJson     Json?
+  evidenceJson     Json?
+  whyItMatters     String
+  fixDirection     String
+  createdAt        DateTime @default(now())
+
+  @@index([reportId, severity])
+  @@unique([reportId, fingerprint])
+  @@map("findings")
+}
+
+model Receipt {
+  id              String   @id @default(uuid())
+  reportId         String   @unique
+  report           Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportHash       String
+  txHash           String
+  chainId          Int
+  contractAddress  String
+  receiptId        String
+  mintedBy         String
+  mintedAt         DateTime
+  createdAt        DateTime @default(now())
+
+  @@index([reportHash])
+  @@map("receipts")
+}
+
+model AuthNonce {
+  id        String   @id @default(uuid())
+  wallet    String
+  nonce     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([wallet, expiresAt])
+  @@map("auth_nonces")
+}
+
+model RateLimitSnapshot {
+  id        String   @id @default(uuid())
+  date      DateTime
+  ip        String
+  wallet    String?
+  counter   Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, ip, wallet])
+  @@index([date, wallet])
+  @@map("rate_limits")
+}
+
+
+

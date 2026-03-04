@@ -1,0 +1,49 @@
+name: Slither
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  slither:
+    name: Slither Security Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Enforce suppression policy (no inline slither-disable)
+        shell: bash
+        run: |
+          if grep -RIn --include='*.sol' -E 'slither-disable(-next-line|-start|-end)?' contracts; then
+            echo "Inline Slither suppressions are forbidden. Use slither.config.json + triage database with documented justification."
+            exit 1
+          fi
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          target: .
+          slither-config: slither.config.json
+          fail-on: config
+          slither-args: --json-types detectors
+
+      - name: Upload Slither JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-report
+          path: slither-report.json
+          if-no-files-found: warn
