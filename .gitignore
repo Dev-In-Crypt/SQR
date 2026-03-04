@@ -57,6 +57,7 @@ test-results/
 
 # Slither artifacts
 slither-report.json
+.tmp-slither-check/
 # Note: keep slither.db.json tracked as reviewed security baseline.
 
 # OS / IDE
