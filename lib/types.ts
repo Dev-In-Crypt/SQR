@@ -1,4 +1,4 @@
-export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+﻿export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
 export type AnalysisStatus =
   | "QUEUED"
@@ -45,6 +45,7 @@ export interface ReportPayload {
   executiveSummary: string;
   findings: Finding[];
   metadata: ReportMetadata;
+  warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];
   reportHash: string;
@@ -82,5 +83,6 @@ export interface NormalizedAnalysisInput {
 
 export interface ScannerOutput {
   findings: Finding[];
+  warnings: string[];
   scannerErrors: string[];
 }

@@ -1,11 +1,15 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { mkdtemp, mkdir, readFile, rm, writeFile, access } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 
 import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
 import type { Finding, ScannerOutput, Severity, SourceBundle } from "@/lib/types";
+
+const DIAGNOSTIC_LIMIT = 3000;
 
 const SLITHER_DETECTORS = [
   "reentrancy-eth",
@@ -17,6 +21,108 @@ const SLITHER_DETECTORS = [
   "unprotected-upgrade",
   "missing-zero-check"
 ];
+
+type SlitherRuntimeMode = "snippet" | "project";
+type CompileFramework = "solc" | "foundry";
+
+interface CommandResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  errorMessage?: string;
+}
+
+export interface ScannerRuntime {
+  runCommand(
+    command: string,
+    args: string[],
+    options: {
+      cwd: string;
+      env?: NodeJS.ProcessEnv;
+    }
+  ): Promise<CommandResult>;
+}
+
+interface SlitherExecutionPlan {
+  compileFramework: CompileFramework;
+  entryPoint: string;
+  cwd: string;
+  standalone: boolean;
+  cleanupDir?: string;
+}
+
+interface SlitherDetector {
+  check?: string;
+  impact?: string;
+  confidence?: string;
+  description?: string;
+  elements?: Array<{
+    source_mapping?: {
+      filename_relative?: string;
+      lines?: number[];
+    };
+  }>;
+}
+
+interface SlitherJsonOutput {
+  success?: boolean;
+  error?: string | null;
+  results?: {
+    detectors?: SlitherDetector[];
+  };
+}
+
+const defaultScannerRuntime: ScannerRuntime = {
+  async runCommand(command, args, options) {
+    return await new Promise<CommandResult>((resolvePromise) => {
+      const child = spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+
+      let stdout = "";
+      let stderr = "";
+      let errorMessage: string | undefined;
+      let settled = false;
+
+      const finish = (result: CommandResult) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolvePromise(result);
+      };
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+
+      child.on("error", (error) => {
+        errorMessage = error.message;
+        finish({
+          code: null,
+          stdout,
+          stderr,
+          errorMessage
+        });
+      });
+
+      child.on("exit", (code) => {
+        finish({
+          code,
+          stdout,
+          stderr,
+          errorMessage
+        });
+      });
+    });
+  }
+};
 
 function severityFromImpact(impact: string): Severity {
   const normalized = impact.toLowerCase();
@@ -64,121 +170,474 @@ function dedupeFindings(findings: Finding[]): Finding[] {
   return [...map.values()];
 }
 
-async function runSlither(sourceBundle: SourceBundle): Promise<ScannerOutput> {
-  const workDir = await mkdtemp(join(tmpdir(), "sqr-slither-"));
-  const scannerErrors: string[] = [];
+function truncateDiagnostic(raw: string): string {
+  const text = raw.trim();
+  if (!text) {
+    return "no diagnostics captured";
+  }
+  if (text.length <= DIAGNOSTIC_LIMIT) {
+    return text;
+  }
+  return `${text.slice(0, DIAGNOSTIC_LIMIT - 14)}...(truncated)`;
+}
 
+function normalizeWorkspaceRelativePath(rawPath: string | undefined, index: number): string {
+  const fallback = `Source${index + 1}.sol`;
+  if (!rawPath) {
+    return fallback;
+  }
+
+  const withoutDrive = rawPath.replace(/^[A-Za-z]:[\\/]/, "");
+  const withoutLeadingSlash = withoutDrive.replace(/^[\\/]+/, "");
+  let candidate = normalize(withoutLeadingSlash);
+
+  while (candidate === ".." || candidate.startsWith(`..${sep}`)) {
+    candidate = candidate.slice(3);
+  }
+
+  if (!candidate || candidate === ".") {
+    candidate = fallback;
+  }
+
+  if (!candidate.toLowerCase().endsWith(".sol")) {
+    candidate = `${candidate}.sol`;
+  }
+
+  return candidate;
+}
+
+async function pathExists(path: string): Promise<boolean> {
   try {
-    for (const file of sourceBundle.files) {
-      const absolutePath = join(workDir, file.path);
-      await mkdir(dirname(absolutePath), { recursive: true });
-      await writeFile(absolutePath, file.content, "utf8");
+    await access(path, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isWithinPath(child: string, parent: string): boolean {
+  const childResolved = resolve(child);
+  const parentResolved = resolve(parent);
+
+  if (process.platform === "win32") {
+    const childLower = childResolved.toLowerCase();
+    const parentLower = parentResolved.toLowerCase();
+    return childLower === parentLower || childLower.startsWith(`${parentLower}${sep}`);
+  }
+
+  return childResolved === parentResolved || childResolved.startsWith(`${parentResolved}${sep}`);
+}
+
+async function findFoundryProjectRoot(startDir: string): Promise<string | null> {
+  let current = resolve(startDir);
+
+  for (;;) {
+    if (await pathExists(join(current, "foundry.toml"))) {
+      return current;
     }
 
-    const entryPoint = join(workDir, sourceBundle.files[0]?.path ?? "PastedSnippet.sol");
-    const output = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      const child = spawn(
-        "slither",
-        [
-          entryPoint,
-          "--json",
-          "-",
-          "--detect",
-          SLITHER_DETECTORS.join(","),
-          "--exclude-dependencies"
-        ],
-        {
-          stdio: ["ignore", "pipe", "pipe"]
-        }
-      );
+    const parent = dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
 
-      let stdout = "";
-      let stderr = "";
+async function resolveExistingEntryPoint(sourceBundle: SourceBundle): Promise<string | null> {
+  const firstPath = sourceBundle.files[0]?.path;
+  if (!firstPath) {
+    return null;
+  }
 
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
+  const candidates: string[] = [];
+  if (isAbsolute(firstPath)) {
+    candidates.push(firstPath);
+  }
+  candidates.push(resolve(process.cwd(), firstPath));
 
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
+  for (const candidate of candidates) {
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
 
-      child.on("error", reject);
+  return null;
+}
 
-      child.on("exit", (code) => {
-        if (code !== 0) {
-          reject(new Error(stderr || `slither exited with code ${code}`));
-          return;
-        }
+async function materializeSourceBundle(
+  sourceBundle: SourceBundle
+): Promise<{ workDir: string; entryPoint: string }> {
+  const workDir = await mkdtemp(join(tmpdir(), "sqr-slither-"));
+  const relativePaths: string[] = [];
 
-        resolve({ stdout, stderr });
-      });
-    });
+  for (let i = 0; i < sourceBundle.files.length; i += 1) {
+    const file = sourceBundle.files[i];
+    const relativePath = normalizeWorkspaceRelativePath(file.path, i);
+    relativePaths.push(relativePath);
 
-    const parsed = JSON.parse(output.stdout) as {
-      results?: {
-        detectors?: Array<{
-          check?: string;
-          impact?: string;
-          confidence?: string;
-          description?: string;
-          elements?: Array<{
-            source_mapping?: {
-              filename_relative?: string;
-              lines?: number[];
-            };
-          }>;
-        }>;
-      };
+    const absolutePath = join(workDir, relativePath);
+    await mkdir(dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, file.content, "utf8");
+  }
+
+  const entryRelativePath = relativePaths[0] ?? "PastedSnippet.sol";
+  const entryPoint = join(workDir, entryRelativePath);
+
+  if (!(await pathExists(entryPoint))) {
+    await writeFile(entryPoint, sourceBundle.files[0]?.content ?? "", "utf8");
+  }
+
+  return {
+    workDir,
+    entryPoint
+  };
+}
+
+async function createSlitherExecutionPlan(
+  sourceBundle: SourceBundle,
+  runtimeMode: SlitherRuntimeMode
+): Promise<SlitherExecutionPlan> {
+  if (runtimeMode === "snippet") {
+    const workspace = await materializeSourceBundle(sourceBundle);
+    return {
+      compileFramework: "solc",
+      entryPoint: workspace.entryPoint,
+      cwd: workspace.workDir,
+      standalone: true,
+      cleanupDir: workspace.workDir
     };
+  }
 
-    const findings: Finding[] = (parsed.results?.detectors ?? []).map((detector) => {
-      const filePath = detector.elements?.[0]?.source_mapping?.filename_relative ?? "unknown";
-      const line = detector.elements?.[0]?.source_mapping?.lines?.[0];
-      const description = detector.description?.trim() ?? detector.check ?? "Potential issue";
-      const excerpt = description.slice(0, 220);
-      const fingerprint = hashCanonical({
-        check: detector.check,
+  const existingEntryPoint = await resolveExistingEntryPoint(sourceBundle);
+  if (existingEntryPoint) {
+    const foundryRoot = await findFoundryProjectRoot(dirname(existingEntryPoint));
+    if (foundryRoot && isWithinPath(existingEntryPoint, foundryRoot)) {
+      return {
+        compileFramework: "foundry",
+        entryPoint: existingEntryPoint,
+        cwd: foundryRoot,
+        standalone: false
+      };
+    }
+  }
+
+  const workspace = await materializeSourceBundle(sourceBundle);
+  return {
+    compileFramework: "solc",
+    entryPoint: workspace.entryPoint,
+    cwd: workspace.workDir,
+    standalone: true,
+    cleanupDir: workspace.workDir
+  };
+}
+
+async function readSlitherOutput(
+  outputPath: string
+): Promise<{ parsed: SlitherJsonOutput | null; parseError?: string }> {
+  if (!(await pathExists(outputPath))) {
+    return { parsed: null };
+  }
+
+  try {
+    const raw = await readFile(outputPath, "utf8");
+    return {
+      parsed: JSON.parse(raw) as SlitherJsonOutput
+    };
+  } catch (error) {
+    return {
+      parsed: null,
+      parseError: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function buildSlitherDiagnostics(params: {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  outputError?: string | null;
+  parseError?: string;
+  errorMessage?: string;
+}): string {
+  const parts: string[] = [];
+  if (params.outputError?.trim()) {
+    parts.push(`outputError=${params.outputError.trim()}`);
+  }
+  if (params.parseError?.trim()) {
+    parts.push(`outputParseError=${params.parseError.trim()}`);
+  }
+  if (params.stderr.trim()) {
+    parts.push(`stderr=${params.stderr.trim()}`);
+  }
+  if (params.stdout.trim()) {
+    parts.push(`stdout=${params.stdout.trim()}`);
+  }
+  if (params.errorMessage?.trim()) {
+    parts.push(`spawnError=${params.errorMessage.trim()}`);
+  }
+  if (parts.length === 0) {
+    parts.push(`exitCode=${params.code ?? "unknown"}`);
+  }
+  const compact = parts.join(" | ").replace(/\s+/g, " ");
+  return truncateDiagnostic(compact);
+}
+interface SolcResolution {
+  command: string;
+  resolvedPath: string;
+  attemptedPath: string;
+  solcPathSet: boolean;
+  error?: string;
+}
+async function resolveSolcBinary(): Promise<SolcResolution> {
+  const configuredSolcPath = config.SOLC_PATH?.trim();
+  if (!configuredSolcPath) {
+    return {
+      command: "solc",
+      resolvedPath: "solc",
+      attemptedPath: "solc",
+      solcPathSet: false
+    };
+  }
+  if (!isAbsolute(configuredSolcPath)) {
+    return {
+      command: configuredSolcPath,
+      resolvedPath: configuredSolcPath,
+      attemptedPath: configuredSolcPath,
+      solcPathSet: true,
+      error: "SOLC_PATH must be an absolute path."
+    };
+  }
+  if (!(await pathExists(configuredSolcPath))) {
+    return {
+      command: configuredSolcPath,
+      resolvedPath: configuredSolcPath,
+      attemptedPath: configuredSolcPath,
+      solcPathSet: true,
+      error: "SOLC_PATH does not exist."
+    };
+  }
+  return {
+    command: configuredSolcPath,
+    resolvedPath: configuredSolcPath,
+    attemptedPath: configuredSolcPath,
+    solcPathSet: true
+  };
+}
+function pushSolcMissingWarnings(params: {
+  warnings: string[];
+  solcPathSet: boolean;
+  attemptedPath: string;
+  reason: string;
+}): void {
+  params.warnings.push("SLITHER_SKIPPED_SOLC_MISSING");
+  params.warnings.push(
+    `SLITHER_SKIPPED_SOLC_MISSING_DETAIL: SOLC_PATH set=${String(params.solcPathSet)}; attempted=${params.attemptedPath}; reason=${params.reason}`
+  );
+}
+
+function toSlitherFinding(detector: SlitherDetector): Finding {
+  const filePath = detector.elements?.[0]?.source_mapping?.filename_relative ?? "unknown";
+  const line = detector.elements?.[0]?.source_mapping?.lines?.[0];
+  const description = detector.description?.trim() ?? detector.check ?? "Potential issue";
+  const excerpt = description.slice(0, 220);
+  const fingerprint = hashCanonical({
+    check: detector.check,
+    filePath,
+    line,
+    excerpt
+  });
+
+  return {
+    id: fingerprint,
+    title: detector.check ?? "Potential issue",
+    severity: severityFromImpact(detector.impact ?? "low"),
+    evidence: [
+      {
         filePath,
         line,
         excerpt
+      }
+    ],
+    whyItMatters:
+      "The static scanner flagged this pattern as risky and it can change control flow or asset safety.",
+    fixDirection:
+      "Review the affected code path and apply a defensive pattern specific to this detector.",
+    confidence: confidenceScore(detector.confidence ?? "medium"),
+    needsManualCheck: false,
+    fingerprint
+  };
+}
+
+async function runSlither(params: {
+  sourceBundle: SourceBundle;
+  runtime: ScannerRuntime;
+  runtimeMode: SlitherRuntimeMode;
+  slitherRequired: boolean;
+}): Promise<ScannerOutput> {
+  const scannerErrors: string[] = [];
+  const warnings: string[] = [];
+  let outputPath: string | null = null;
+
+  const plan = await createSlitherExecutionPlan(params.sourceBundle, params.runtimeMode);
+
+  try {
+    let solcResolution: SolcResolution | null = null;
+    if (plan.standalone) {
+      solcResolution = await resolveSolcBinary();
+      if (solcResolution.error) {
+        pushSolcMissingWarnings({
+          warnings,
+          solcPathSet: solcResolution.solcPathSet,
+          attemptedPath: solcResolution.attemptedPath,
+          reason: solcResolution.error
+        });
+        return {
+          findings: [],
+          scannerErrors,
+          warnings
+        };
+      }
+      const solcResult = await params.runtime.runCommand(solcResolution.command, ["--version"], {
+        cwd: plan.cwd
+      });
+      if (solcResult.code !== 0) {
+        const reason = buildSlitherDiagnostics({
+          code: solcResult.code,
+          stdout: solcResult.stdout,
+          stderr: solcResult.stderr,
+          errorMessage: solcResult.errorMessage
+        });
+        pushSolcMissingWarnings({
+          warnings,
+          solcPathSet: solcResolution.solcPathSet,
+          attemptedPath: solcResolution.attemptedPath,
+          reason
+        });
+        return {
+          findings: [],
+          scannerErrors,
+          warnings
+        };
+      }
+      const solcVersion = truncateDiagnostic(
+        (solcResult.stdout.trim() || solcResult.stderr.trim() || "unknown version").replace(/\s+/g, " ")
+      );
+      void solcVersion;
+    }
+    outputPath = join(plan.cwd, `slither-output-${randomUUID()}.json`);
+    const slitherArgs = [
+      plan.entryPoint,
+      "--json",
+      outputPath,
+      "--json-types",
+      "detectors",
+      "--detect",
+      SLITHER_DETECTORS.join(","),
+      "--exclude-dependencies",
+      "--compile-force-framework",
+      plan.compileFramework
+    ];
+    if (plan.standalone && solcResolution) {
+      slitherArgs.push("--solc", solcResolution.resolvedPath);
+    }
+
+    const slitherEnv =
+      plan.standalone && solcResolution
+        ? (() => {
+            const currentPath = process.env.PATH ?? process.env.Path ?? "";
+            const solcDir = isAbsolute(solcResolution.resolvedPath)
+              ? dirname(solcResolution.resolvedPath)
+              : "";
+            const mergedPath =
+              solcDir && !currentPath.toLowerCase().includes(solcDir.toLowerCase())
+                ? `${solcDir}${delimiter}${currentPath}`
+                : currentPath;
+
+            return {
+              ...process.env,
+              PATH: mergedPath,
+              Path: mergedPath,
+              SOLC: solcResolution.resolvedPath
+            };
+          })()
+        : undefined;
+    const commandResult = await params.runtime.runCommand("slither", slitherArgs, {
+      cwd: plan.cwd,
+      env: slitherEnv
+    });
+    const { parsed, parseError } = await readSlitherOutput(outputPath);
+
+    if (commandResult.code !== 0 || parsed?.success === false) {
+      const diagnostic = buildSlitherDiagnostics({
+        code: commandResult.code,
+        stdout: commandResult.stdout,
+        stderr: commandResult.stderr,
+        outputError: parsed?.error,
+        parseError,
+        errorMessage: commandResult.errorMessage
       });
 
-      return {
-        id: fingerprint,
-        title: detector.check ?? "Potential issue",
-        severity: severityFromImpact(detector.impact ?? "low"),
-        evidence: [
-          {
-            filePath,
-            line,
-            excerpt
-          }
-        ],
-        whyItMatters:
-          "The static scanner flagged this pattern as risky and it can change control flow or asset safety.",
-        fixDirection:
-          "Review the affected code path and apply a defensive pattern specific to this detector.",
-        confidence: confidenceScore(detector.confidence ?? "medium"),
-        needsManualCheck: false,
-        fingerprint
-      };
-    });
+      if (params.slitherRequired) {
+        scannerErrors.push(`SLITHER_ERROR:${diagnostic}`);
+      } else {
+        warnings.push(`SLITHER_WARNING:${diagnostic}`);
+      }
 
+      return {
+        findings: [],
+        scannerErrors,
+        warnings
+      };
+    }
+
+    if (!parsed) {
+      const diagnostic = buildSlitherDiagnostics({
+        code: commandResult.code,
+        stdout: commandResult.stdout,
+        stderr: commandResult.stderr,
+        parseError
+      });
+
+      if (params.slitherRequired) {
+        scannerErrors.push(`SLITHER_ERROR:${diagnostic}`);
+      } else {
+        warnings.push(`SLITHER_WARNING:${diagnostic}`);
+      }
+
+      return {
+        findings: [],
+        scannerErrors,
+        warnings
+      };
+    }
+
+    const findings = (parsed.results?.detectors ?? []).map((detector) => toSlitherFinding(detector));
     return {
       findings,
-      scannerErrors
+      scannerErrors,
+      warnings
     };
   } catch (error) {
-    scannerErrors.push(
-      error instanceof Error ? `SLITHER_ERROR:${error.message}` : `SLITHER_ERROR:${String(error)}`
-    );
+    const diagnostic = truncateDiagnostic(error instanceof Error ? error.message : String(error));
+    if (params.slitherRequired) {
+      scannerErrors.push(`SLITHER_ERROR:${diagnostic}`);
+    } else {
+      warnings.push(`SLITHER_WARNING:${diagnostic}`);
+    }
+
     return {
       findings: [],
-      scannerErrors
+      scannerErrors,
+      warnings
     };
   } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+    if (outputPath) {
+      await rm(outputPath, { force: true }).catch(() => undefined);
+    }
+    if (plan.cleanupDir) {
+      await rm(plan.cleanupDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
 
@@ -278,16 +737,30 @@ export async function runStaticScan(
   sourceBundle: SourceBundle,
   options: {
     skipSlither?: boolean;
+    scanMode?: SlitherRuntimeMode;
+    slitherRequired?: boolean;
+    runtime?: ScannerRuntime;
   } = {}
 ): Promise<ScannerOutput> {
   const scannerErrors: string[] = [];
+  const warnings: string[] = [];
   let findings: Finding[] = [];
+  const runtimeMode: SlitherRuntimeMode =
+    options.scanMode ?? (sourceBundle.inputType === "PASTE_CODE" ? "snippet" : "project");
+  const slitherRequired = options.slitherRequired ?? runtimeMode === "project";
+  const runtime = options.runtime ?? defaultScannerRuntime;
 
   const shouldRunSlither = config.slitherEnabled && !options.skipSlither;
 
   if (shouldRunSlither) {
-    const slitherResult = await runSlither(sourceBundle);
+    const slitherResult = await runSlither({
+      sourceBundle,
+      runtime,
+      runtimeMode,
+      slitherRequired
+    });
     scannerErrors.push(...slitherResult.scannerErrors);
+    warnings.push(...slitherResult.warnings);
     findings = slitherResult.findings;
   }
 
@@ -297,7 +770,8 @@ export async function runStaticScan(
 
   return {
     findings: dedupeFindings(findings),
-    scannerErrors
+    scannerErrors,
+    warnings
   };
 }
 

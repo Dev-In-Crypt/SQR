@@ -17,6 +17,7 @@ const envSchema = z.object({
   ANALYZER_VERSION: z.string().default("0.1.0"),
   RULESET_VERSION: z.string().default("0.1.0"),
   ENABLE_SLITHER: z.string().default("true"),
+  SOLC_PATH: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
   OPENAI_TEMPERATURE: z.coerce.number().default(0),
@@ -42,4 +43,3 @@ export const config = {
   isProd: env.NODE_ENV === "production",
   slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
 };
-

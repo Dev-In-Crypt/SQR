@@ -1,4 +1,4 @@
-import { config } from "@/lib/config";
+﻿import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
 import { generateExecutiveSummary } from "@/lib/llm";
 import type { Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
@@ -57,6 +57,7 @@ export function mergeFindings(findings: Finding[]): Finding[] {
 
 export async function buildReport(params: {
   findings: Finding[];
+  warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];
   sourceBundle: SourceBundle;
@@ -92,6 +93,7 @@ export async function buildReport(params: {
       contractAddress: metadata.contractAddress,
       sourceHash: metadata.sourceHash
     },
+    warnings: params.warnings,
     scannerErrors: params.scannerErrors,
     partialReasons: params.partialReasons
   };
@@ -103,6 +105,7 @@ export async function buildReport(params: {
       executiveSummary,
       findings: sortedFindings,
       metadata,
+      warnings: params.warnings,
       scannerErrors: params.scannerErrors,
       partialReasons: params.partialReasons,
       reportHash
@@ -110,5 +113,3 @@ export async function buildReport(params: {
     topSeverity: topSeverity(sortedFindings)
   };
 }
-
-

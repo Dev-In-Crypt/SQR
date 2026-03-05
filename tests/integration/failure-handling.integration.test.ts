@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createPasteAnalysisAndWait, createSession, uniqueCodeSnippet } from "./setup/helpers";
 
 describe("API integration - failure handling", () => {
-  it("incomplete snippet is processed as DONE_WITH_WARNINGS with explicit reason code", async () => {
+  it("incomplete snippet is processed as DONE_WITH_WARNINGS with warning code", async () => {
     const session = createSession({ ip: "198.51.100.50" });
 
     const malformed = [
@@ -19,6 +19,7 @@ describe("API integration - failure handling", () => {
     const report = await session.getJson<{
       reportId: string;
       report: {
+        warnings: string[];
         scannerErrors: string[];
         partialReasons: string[];
       };
@@ -31,11 +32,12 @@ describe("API integration - failure handling", () => {
 
     expect(report.status).toBe(200);
     expect(created.terminalStatus).toBe("DONE_WITH_WARNINGS");
-    expect(report.body.report.partialReasons).toContain("PARTIAL_SOLIDITY_INCOMPLETE");
+    expect(report.body.report.warnings).toContain("PARTIAL_SOLIDITY_INCOMPLETE");
+    expect(report.body.report.partialReasons).not.toContain("PARTIAL_SCANNER_FAILURE");
     expect(report.body.report.scannerErrors.some((item) => item.startsWith("SLITHER_ERROR"))).toBe(false);
   });
 
-  it("scanner failure on complete input is marked as PARTIAL_SCANNER_FAILURE", async () => {
+  it("scanner failure on complete snippet is warning-only and preserves diagnostics", async () => {
     const session = createSession({ ip: "198.51.100.52" });
 
     const scannerFailureInput = [
@@ -52,6 +54,7 @@ describe("API integration - failure handling", () => {
     const report = await session.getJson<{
       reportId: string;
       report: {
+        warnings: string[];
         scannerErrors: string[];
         partialReasons: string[];
       };
@@ -62,10 +65,25 @@ describe("API integration - failure handling", () => {
       }`
     );
 
+    const slitherWarning = report.body.report.warnings.find((item) => item.startsWith("SLITHER_WARNING:"));
+    const solcMissingWarning = report.body.report.warnings.includes("SLITHER_SKIPPED_SOLC_MISSING");
+    const configuredSolcPath = process.env.SOLC_PATH?.trim();
+
     expect(report.status).toBe(200);
-    expect(created.terminalStatus).toBe("PARTIAL");
-    expect(report.body.report.partialReasons).toContain("PARTIAL_SCANNER_FAILURE");
-    expect(report.body.report.scannerErrors.some((item) => item.startsWith("SLITHER_ERROR"))).toBe(true);
+    expect(created.terminalStatus).toBe("DONE_WITH_WARNINGS");
+    expect(report.body.report.partialReasons).not.toContain("PARTIAL_SCANNER_FAILURE");
+    expect(report.body.report.scannerErrors.some((item) => item.startsWith("SLITHER_ERROR"))).toBe(false);
+
+    if (configuredSolcPath) {
+      expect(solcMissingWarning).toBe(false);
+      expect(slitherWarning).toBeTruthy();
+      expect(slitherWarning?.length ?? 0).toBeGreaterThan("SLITHER_WARNING:".length + 20);
+    } else if (solcMissingWarning) {
+      expect(slitherWarning).toBeUndefined();
+    } else {
+      expect(slitherWarning).toBeTruthy();
+      expect(slitherWarning?.length ?? 0).toBeGreaterThan("SLITHER_WARNING:".length + 20);
+    }
   });
 
   it("LLM-unavailable fallback still returns deterministic summary and terminal status", async () => {
@@ -85,7 +103,7 @@ describe("API integration - failure handling", () => {
     );
 
     expect(report.status).toBe(200);
-    expect(["PARTIAL", "COMPLETED"]).toContain(created.terminalStatus);
+    expect(["DONE_WITH_WARNINGS", "COMPLETED"]).toContain(created.terminalStatus);
     expect(report.body.report.executiveSummary.length).toBeGreaterThan(20);
   });
 });

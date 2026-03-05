@@ -150,6 +150,7 @@ Artifacts:
 - `REDIS_URL` (optional)
 - `BASE_RPC_URL` (optional unless receipt confirm reads chain)
 - `RECEIPT_CONTRACT_ADDRESS` (required for receipt mint prepare)
+- `SOLC_PATH` (optional absolute path to `solc`/`solc.exe` used by snippet standalone Slither scans)
 
 ### Integration tests
 Set from shell or CI:
@@ -268,6 +269,8 @@ npm run security:slither:triage
   - run `npm run db:push`, then `npm run check:db` and retry request.
 - `EPERM ... query_engine-windows.dll.node` on `npm run prisma:generate`:
   - stop running Node/Next processes, then retry `npm run prisma:generate` (or reboot if file lock persists).
+- `Slither standalone scan was skipped because solc is not available`:
+  - set `SOLC_PATH` to the absolute compiler binary path (for example `C:\solc\solc.exe` on Windows).
 - receipt confirm hash mismatch:
   - verify tx was minted for the same report and same deployed receipt registry.
 
@@ -275,5 +278,3 @@ npm run security:slither:triage
 - Unverified Base contracts return `SOURCE_UNVERIFIED` and do not run bytecode-only analysis in MVP.
 - Private link token is stored hashed in DB (`privateTokenHash`).
 - Production address analysis enforces Base mainnet chainId 8453.
-
-

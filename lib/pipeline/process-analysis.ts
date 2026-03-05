@@ -1,4 +1,4 @@
-import { Prisma, Severity } from "@prisma/client";
+﻿import { Prisma, Severity } from "@prisma/client";
 
 import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
@@ -114,29 +114,36 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       snippetCompleteness !== null &&
       snippetCompleteness.isComplete === false;
 
+    const isSnippetInput = sourceBundle.inputType === "PASTE_CODE";
     const staticScan = await runStaticScan(sourceBundle, {
-      skipSlither: isSnippetIncomplete
+      skipSlither: isSnippetIncomplete,
+      scanMode: isSnippetInput ? "snippet" : "project",
+      slitherRequired: !isSnippetInput
     });
 
-    const normalizedFindings = staticScan.findings.map((finding) => normalizeFinding(finding));
+    const warnings = [...staticScan.warnings];
     const partialReasons: string[] = [];
 
     if (isSnippetIncomplete) {
-      partialReasons.push("PARTIAL_SOLIDITY_INCOMPLETE");
+      warnings.push("PARTIAL_SOLIDITY_INCOMPLETE");
     }
 
-    if (!isSnippetIncomplete && staticScan.scannerErrors.length > 0) {
+    if (staticScan.scannerErrors.length > 0) {
       partialReasons.push("PARTIAL_SCANNER_FAILURE");
     }
 
-    const finalStatus: AnalysisStatus = isSnippetIncomplete
-      ? "DONE_WITH_WARNINGS"
-      : staticScan.scannerErrors.length > 0
+    const normalizedFindings = staticScan.findings.map((finding) => normalizeFinding(finding));
+
+    const finalStatus: AnalysisStatus =
+      partialReasons.length > 0
         ? "PARTIAL"
-        : "COMPLETED";
+        : warnings.length > 0
+          ? "DONE_WITH_WARNINGS"
+          : "COMPLETED";
 
     const { report, topSeverity } = await buildReport({
       findings: normalizedFindings,
+      warnings,
       scannerErrors: staticScan.scannerErrors,
       partialReasons,
       sourceBundle

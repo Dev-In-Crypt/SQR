@@ -1,7 +1,7 @@
-import type { Finding } from "@/lib/types";
+﻿import type { Finding } from "@/lib/types";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
-import { describePartialReason } from "@/lib/partial-reasons";
+import { describeAnalysisNote } from "@/lib/partial-reasons";
 
 function localExecutiveSummary(findings: Finding[], partialReasons: string[]): string {
   if (findings.length === 0) {
@@ -18,7 +18,7 @@ function localExecutiveSummary(findings: Finding[], partialReasons: string[]): s
     .map((severity) => `${severity}: ${severityCount[severity]}`)
     .join(", ");
 
-  const readableReasons = partialReasons.map((reason) => describePartialReason(reason));
+  const readableReasons = partialReasons.map((reason) => describeAnalysisNote(reason));
   const partial =
     readableReasons.length > 0
       ? ` Partial analysis notes: ${readableReasons.join("; ")}.`

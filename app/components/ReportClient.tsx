@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import WalletButton from "@/app/components/WalletButton";
-import { describePartialReason } from "@/lib/partial-reasons";
+import { describeAnalysisNote } from "@/lib/partial-reasons";
 
 type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
@@ -34,6 +34,7 @@ interface ReportApiResponse {
       contractAddress?: string;
       generatedAt: string;
     };
+    warnings: string[];
     scannerErrors: string[];
     partialReasons: string[];
   };
@@ -338,9 +339,14 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             ))}
           </div>
 
-          {(data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0) ? (
+                    {(data.report.warnings.length > 0 || data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0) ? (
             <div className="card stack">
               <h3 style={{ margin: 0 }}>Analysis Notes</h3>
+              {data.report.warnings.map((item, idx) => (
+                <div key={`warn-${idx}`} className="muted">
+                  warning: {describeAnalysisNote(item)}
+                </div>
+              ))}
               {data.report.scannerErrors.map((item, idx) => (
                 <div key={`err-${idx}`} className="muted">
                   scannerError: {item}
@@ -348,7 +354,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               ))}
               {data.report.partialReasons.map((item, idx) => (
                 <div key={`reason-${idx}`} className="muted">
-                  note: {describePartialReason(item)}
+                  note: {describeAnalysisNote(item)}
                 </div>
               ))}
             </div>
@@ -360,3 +366,6 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     </div>
   );
 }
+
+
+
