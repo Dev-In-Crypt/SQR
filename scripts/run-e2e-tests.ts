@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 
 import { PrismaClient } from "@prisma/client";
 import {
@@ -15,154 +14,32 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
+import {
+  cleanEnv,
+  createCleanupController,
+  createRunScopedDistDir,
+  createRunScopedTsconfig,
+  getRunScopeRoot,
+  removeDirectoryWithRetries,
+  removeFileIfExists,
+  resolvePort,
+  runCommand,
+  spawnLongRunningProcess,
+  stopProcessTree,
+  waitForHttp,
+  waitForJsonRpc
+} from "./test-runtime";
+
 const ROOT = process.cwd();
 const PLAYWRIGHT_CLI = resolve(ROOT, "node_modules/@playwright/test/cli.js");
 
 const ANVIL_DEPLOYER_PRIVATE_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
 
-function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const cleaned = {} as NodeJS.ProcessEnv;
-  for (const [key, value] of Object.entries(env)) {
-    if (typeof value === "string") {
-      cleaned[key] = value;
-    }
-  }
-  return cleaned;
-}
-
 function withSchema(databaseUrl: string, schema: string): string {
   const parsed = new URL(databaseUrl);
   parsed.searchParams.set("schema", schema);
   return parsed.toString();
-}
-
-function logOutput(label: string, chunk: Buffer): void {
-  const lines = chunk.toString().split(/\r?\n/);
-  for (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    console.log(`[e2e:${label}] ${line}`);
-  }
-}
-
-function spawnLongRunning(
-  label: string,
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv
-): ChildProcess {
-  const child = spawn(command, args, {
-    cwd: ROOT,
-    env: cleanEnv(env),
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-
-  child.stdout?.on("data", (chunk: Buffer) => logOutput(label, chunk));
-  child.stderr?.on("data", (chunk: Buffer) => logOutput(label, chunk));
-
-  return child;
-}
-
-async function runCommand(
-  label: string,
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv
-): Promise<void> {
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
-      cwd: ROOT,
-      env: cleanEnv(env),
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-
-    let stderr = "";
-    child.stdout?.on("data", (chunk: Buffer) => logOutput(label, chunk));
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-      logOutput(label, chunk);
-    });
-
-    child.on("error", rejectPromise);
-    child.on("exit", (code: number | null) => {
-      if (code === 0) {
-        resolvePromise();
-        return;
-      }
-
-      rejectPromise(new Error(`Command failed (${label}) with exit ${code}: ${stderr}`));
-    });
-  });
-}
-
-async function waitForHttp(url: string, timeoutMs = 90_000): Promise<void> {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // keep polling
-    }
-
-    await delay(400);
-  }
-
-  throw new Error(`Timed out waiting for ${url}`);
-}
-
-async function waitForRpc(rpcUrl: string): Promise<void> {
-  const start = Date.now();
-
-  while (Date.now() - start < 45_000) {
-    try {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "eth_chainId",
-          params: []
-        })
-      });
-
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // keep polling
-    }
-
-    await delay(300);
-  }
-
-  throw new Error(`Timed out waiting for JSON-RPC ${rpcUrl}`);
-}
-
-async function stopProcess(child: ChildProcess | null): Promise<void> {
-  if (!child || child.killed) {
-    return;
-  }
-
-  const exited = new Promise<void>((resolvePromise) => {
-    child.once("exit", () => resolvePromise());
-  });
-
-  child.kill("SIGTERM");
-  await Promise.race([exited, delay(4_000)]);
-
-  if (child.exitCode === null) {
-    child.kill("SIGKILL");
-    await Promise.race([exited, delay(4_000)]);
-  }
 }
 
 function chainForRpc(rpcUrl: string) {
@@ -204,42 +81,92 @@ async function main() {
   const schema = `e2e_${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
   const testDatabaseUrl = withSchema(baseDatabaseUrl, schema);
 
-  const appPort = Number(process.env.SQR_E2E_PORT || "3121");
-  const anvilPort = Number(process.env.SQR_E2E_ANVIL_PORT || "8645");
+  const appPort = await resolvePort({
+    envName: "SQR_E2E_PORT",
+    label: "E2E app"
+  });
+  const anvilPort = await resolvePort({
+    envName: "SQR_E2E_ANVIL_PORT",
+    label: "E2E anvil"
+  });
+
   const baseUrl = `http://127.0.0.1:${appPort}`;
   const rpcUrl = `http://127.0.0.1:${anvilPort}`;
+  const runScopedDistDir = createRunScopedDistDir("e2e");
+  const runScopeRoot = getRunScopeRoot(runScopedDistDir);
+  const runScopedTsconfig = await createRunScopedTsconfig(runScopedDistDir);
 
   let anvilProcess: ChildProcess | null = null;
   let appProcess: ChildProcess | null = null;
 
+  const cleanupController = createCleanupController({
+    label: "e2e",
+    cleanup: async () => {
+      await stopProcessTree(appProcess, "e2e:next");
+      await stopProcessTree(anvilProcess, "e2e:anvil");
+
+      const adminDbUrl = withSchema(baseDatabaseUrl, "public");
+      const prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: adminDbUrl
+          }
+        }
+      });
+
+      try {
+        await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      try {
+        await removeDirectoryWithRetries(resolve(ROOT, runScopeRoot));
+      } catch (error) {
+        console.warn(`[e2e] failed to remove ${runScopeRoot}: ${String(error)}`);
+      }
+
+      try {
+        await removeFileIfExists(resolve(ROOT, runScopedTsconfig));
+      } catch (error) {
+        console.warn(`[e2e] failed to remove ${runScopedTsconfig}: ${String(error)}`);
+      }
+    }
+  });
+
+  cleanupController.register();
+
   try {
-    await runCommand(
-      "prisma",
-      process.execPath,
-      [resolve(ROOT, "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"],
-      {
+    console.log(`[e2e] using app port ${appPort}, anvil port ${anvilPort}`);
+
+    await runCommand({
+      prefix: "e2e:prisma",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"],
+      cwd: ROOT,
+      env: {
         ...process.env,
         DATABASE_URL: testDatabaseUrl
       }
-    );
+    });
 
-    anvilProcess = spawnLongRunning(
-      "anvil",
-      "anvil",
-      [
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(anvilPort),
-        "--chain-id",
-        "8453"
-      ],
-      process.env
-    );
+    anvilProcess = spawnLongRunningProcess({
+      prefix: "e2e:anvil",
+      command: "anvil",
+      args: ["--host", "127.0.0.1", "--port", String(anvilPort), "--chain-id", "8453"],
+      cwd: ROOT,
+      env: process.env
+    });
 
-    await waitForRpc(rpcUrl);
+    await waitForJsonRpc(rpcUrl);
 
-    await runCommand("forge", "forge", ["build"], process.env);
+    await runCommand({
+      prefix: "e2e:forge",
+      command: "forge",
+      args: ["build"],
+      cwd: ROOT,
+      env: process.env
+    });
 
     const artifact = JSON.parse(
       await readFile(resolve(ROOT, "contracts/out/ReceiptRegistry.sol/ReceiptRegistry.json"), "utf8")
@@ -283,22 +210,18 @@ async function main() {
       RECEIPT_CONTRACT_ADDRESS: deployReceipt.contractAddress,
       ENABLE_SLITHER: "true",
       OPENAI_API_KEY: "",
-      REDIS_URL: ""
+      REDIS_URL: "",
+      SQR_NEXT_DIST_DIR: runScopedDistDir,
+      SQR_NEXT_TSCONFIG: runScopedTsconfig
     };
 
-    appProcess = spawnLongRunning(
-      "next",
-      process.execPath,
-      [
-        resolve(ROOT, "node_modules/next/dist/bin/next"),
-        "dev",
-        "-p",
-        String(appPort),
-        "-H",
-        "127.0.0.1"
-      ],
-      appEnv
-    );
+    appProcess = spawnLongRunningProcess({
+      prefix: "e2e:next",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "dev", "-p", String(appPort), "-H", "127.0.0.1"],
+      cwd: ROOT,
+      env: appEnv
+    });
 
     await waitForHttp(`${baseUrl}/api/v1/session`);
 
@@ -314,27 +237,13 @@ async function main() {
     const exitCode = await runPlaywright(playwrightEnv, process.argv.slice(2));
     process.exitCode = exitCode;
   } finally {
-    await stopProcess(appProcess);
-    await stopProcess(anvilProcess);
-
-    const adminDbUrl = withSchema(baseDatabaseUrl, "public");
-    const prisma = new PrismaClient({
-      datasources: {
-        db: {
-          url: adminDbUrl
-        }
-      }
-    });
-
-    try {
-      await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-    } finally {
-      await prisma.$disconnect();
-    }
+    cleanupController.unregister();
+    await cleanupController.run();
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });
+

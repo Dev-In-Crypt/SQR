@@ -1,4 +1,4 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -8,7 +8,7 @@ const envSchema = z.object({
   BASE_CHAIN_ID: z.coerce.number().default(8453),
   STAGING_BASE_CHAIN_ID: z.coerce.number().default(84532),
   BASE_RPC_URL: z.string().optional(),
-  BASESCAN_API_URL: z.string().url().default("https://api.basescan.org/api"),
+  BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
   SOURCIFY_API_URL: z
     .string()
@@ -19,6 +19,9 @@ const envSchema = z.object({
   ENABLE_SLITHER: z.string().default("true"),
   SOLC_PATH: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  OPENAI_HTTP_REFERER: z.string().url().optional(),
+  OPENAI_APP_NAME: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
   OPENAI_TEMPERATURE: z.coerce.number().default(0),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
@@ -43,3 +46,4 @@ export const config = {
   isProd: env.NODE_ENV === "production",
   slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
 };
+

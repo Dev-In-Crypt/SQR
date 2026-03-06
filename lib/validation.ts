@@ -38,7 +38,14 @@ export const verifyWalletSchema = z.object({
   signature: z.string().min(1)
 });
 
-export const receiptConfirmSchema = z.object({
-  txHash: z.string().startsWith("0x")
-});
+const hexAddress = z.string().regex(/^0x[a-fA-F0-9]{40}$/, "owner must be a 20-byte hex address");
+const hexBytes = z.string().regex(/^0x[a-fA-F0-9]+$/, "signature must be a hex string");
+const uintString = z.string().regex(/^\d+$/, "must be an unsigned integer string");
 
+export const receiptConfirmSchema = z.object({
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, "txHash must be a 32-byte hex string"),
+  owner: hexAddress,
+  nonce: uintString,
+  deadline: uintString,
+  signature: hexBytes
+});

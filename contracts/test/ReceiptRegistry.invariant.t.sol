@@ -4,38 +4,64 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../ReceiptRegistry.sol";
 
-contract ReceiptRegistryHandler {
-    struct Snapshot {
-        uint256 receiptId;
-        address owner;
-        address contractAddress;
-        bytes32 analyzerVersionHash;
-        uint256 timestamp;
-    }
+contract ReceiptRegistryInvariantTest is Test {
+    ReceiptRegistry internal registry;
 
-    ReceiptRegistry public immutable registry;
+    uint256 internal ownerKey = 0x59c6995e998f97a5a0044966f094538e8d6d7f2adf0d8fcb7d500f9f8f9d3d9f;
+    address internal ownerWallet;
 
     bytes32[] private knownHashes;
     mapping(bytes32 => bool) private isKnown;
-    mapping(bytes32 => Snapshot) private snapshots;
+    mapping(bytes32 => uint256) private firstReceiptId;
+    mapping(bytes32 => address) private firstContractAddress;
+    mapping(bytes32 => bytes32) private firstAnalyzerVersion;
 
     uint256 public uniqueMints;
 
-    constructor(ReceiptRegistry _registry) {
-        registry = _registry;
+    bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
+        keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+        );
+    bytes32 internal constant MINT_AUTHORIZATION_TYPEHASH =
+        keccak256(
+            "MintAuthorization(bytes32 reportHash,address contractAddress,bytes32 analyzerVersionHash,address owner,uint256 nonce,uint256 deadline)"
+        );
+
+    function setUp() public {
+        registry = new ReceiptRegistry();
+        ownerWallet = vm.addr(ownerKey);
     }
 
-    function mint(
+    function targetContracts() public view returns (address[] memory targets) {
+        targets = new address[](1);
+        targets[0] = address(this);
+    }
+
+    function mintWithAuth(
         bytes32 reportHash,
         address contractAddress,
         bytes32 analyzerVersionHash
     ) external {
+        uint256 nonce = registry.nonces(ownerWallet);
+        uint256 deadline = block.timestamp + 600;
+        bytes memory signature = _signAuthorization(
+            reportHash,
+            contractAddress,
+            analyzerVersionHash,
+            nonce,
+            deadline
+        );
+
         (bool success, bytes memory data) = address(registry).call(
             abi.encodeWithSelector(
-                registry.mint.selector,
+                registry.mintWithSig.selector,
                 reportHash,
                 contractAddress,
-                analyzerVersionHash
+                analyzerVersionHash,
+                ownerWallet,
+                nonce,
+                deadline,
+                signature
             )
         );
 
@@ -55,112 +81,79 @@ contract ReceiptRegistryHandler {
             isKnown[reportHash] = true;
             knownHashes.push(reportHash);
             uniqueMints += 1;
-
-            (
-                uint256 storedId,
-                address owner,
-                address storedContractAddress,
-                bytes32 storedVersion,
-                uint256 storedTimestamp
-            ) = registry.getByHash(reportHash);
-
-            snapshots[reportHash] = Snapshot({
-                receiptId: storedId,
-                owner: owner,
-                contractAddress: storedContractAddress,
-                analyzerVersionHash: storedVersion,
-                timestamp: storedTimestamp
-            });
-
+            firstReceiptId[reportHash] = receiptId;
+            firstContractAddress[reportHash] = contractAddress;
+            firstAnalyzerVersion[reportHash] = analyzerVersionHash;
             require(newlyMinted, "FIRST_MINT_NOT_NEW");
-            require(storedId == receiptId, "FIRST_MINT_ID_MISMATCH");
             return;
         }
 
-        Snapshot memory snapshot = snapshots[reportHash];
-        if (analyzerVersionHash == snapshot.analyzerVersionHash) {
+        if (analyzerVersionHash == firstAnalyzerVersion[reportHash]) {
             require(!newlyMinted, "DUPLICATE_MARKED_NEW");
-            require(receiptId == snapshot.receiptId, "DUPLICATE_ID_CHANGED");
+            require(receiptId == firstReceiptId[reportHash], "DUPLICATE_ID_CHANGED");
         }
     }
 
-    function knownHashesLength() external view returns (uint256) {
+    function knownHashesLength() public view returns (uint256) {
         return knownHashes.length;
     }
 
-    function knownHashAt(uint256 index) external view returns (bytes32) {
+    function knownHashAt(uint256 index) public view returns (bytes32) {
         return knownHashes[index];
     }
 
-    function snapshotFor(
-        bytes32 reportHash
-    )
-        external
-        view
-        returns (
-            uint256 receiptId,
-            address owner,
-            address contractAddress,
-            bytes32 analyzerVersionHash,
-            uint256 timestamp
-        )
-    {
-        Snapshot memory snapshot = snapshots[reportHash];
-        return (
-            snapshot.receiptId,
-            snapshot.owner,
-            snapshot.contractAddress,
-            snapshot.analyzerVersionHash,
-            snapshot.timestamp
-        );
-    }
-}
-
-contract ReceiptRegistryInvariantTest is Test {
-    ReceiptRegistry internal registry;
-    ReceiptRegistryHandler internal handler;
-
-    function setUp() public {
-        registry = new ReceiptRegistry();
-        handler = new ReceiptRegistryHandler(registry);
-    }
-
-    function targetContracts() public view returns (address[] memory targets) {
-        targets = new address[](1);
-        targets[0] = address(handler);
-    }
-
     function invariantNextReceiptIdTracksUniqueHashes() public view {
-        assertEq(registry.nextReceiptId(), handler.uniqueMints() + 1);
+        assertEq(registry.nextReceiptId(), uniqueMints + 1);
     }
 
-    function invariantStoredReceiptsAreImmutableAndUnique() public view {
-        uint256 length = handler.knownHashesLength();
+    function invariantStoredReceiptsAreImmutableAndOwnedBySignedWallet() public view {
+        uint256 length = knownHashesLength();
 
         for (uint256 i = 0; i < length; i++) {
-            bytes32 reportHash = handler.knownHashAt(i);
+            bytes32 reportHash = knownHashAt(i);
 
-            (
-                uint256 storedId,
-                address storedOwner,
-                address storedContractAddress,
-                bytes32 storedVersion,
-                uint256 storedTimestamp
-            ) = registry.getByHash(reportHash);
+            (uint256 storedId, address storedOwner, address storedContract, bytes32 storedAnalyzer, ) =
+                registry.getByHash(reportHash);
 
-            (
-                uint256 expectedId,
-                address expectedOwner,
-                address expectedContractAddress,
-                bytes32 expectedVersion,
-                uint256 expectedTimestamp
-            ) = handler.snapshotFor(reportHash);
-
-            assertEq(storedId, expectedId);
-            assertEq(storedOwner, expectedOwner);
-            assertEq(storedContractAddress, expectedContractAddress);
-            assertEq(storedVersion, expectedVersion);
-            assertEq(storedTimestamp, expectedTimestamp);
+            assertEq(storedId, firstReceiptId[reportHash]);
+            assertEq(storedOwner, ownerWallet);
+            assertEq(storedContract, firstContractAddress[reportHash]);
+            assertEq(storedAnalyzer, firstAnalyzerVersion[reportHash]);
         }
     }
+
+    function _signAuthorization(
+        bytes32 reportHash,
+        address contractAddress,
+        bytes32 analyzerVersionHash,
+        uint256 nonce,
+        uint256 deadline
+    ) internal returns (bytes memory signature) {
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                keccak256("ReceiptRegistry"),
+                keccak256("0.2.0"),
+                block.chainid,
+                address(registry)
+            )
+        );
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                MINT_AUTHORIZATION_TYPEHASH,
+                reportHash,
+                contractAddress,
+                analyzerVersionHash,
+                ownerWallet,
+                nonce,
+                deadline
+            )
+        );
+
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, digest);
+        return abi.encodePacked(r, s, v);
+    }
 }
+

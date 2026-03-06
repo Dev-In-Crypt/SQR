@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { type ChildProcess } from "node:child_process";
 
 import { PrismaClient } from "@prisma/client";
 import {
@@ -16,176 +16,29 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
+import {
+  createCleanupController,
+  createRunScopedDistDir,
+  createRunScopedTsconfig,
+  getRunScopeRoot,
+  removeDirectoryWithRetries,
+  removeFileIfExists,
+  resolvePort,
+  runCommand,
+  spawnLongRunningProcess,
+  stopProcessTree,
+  waitForHttp,
+  waitForJsonRpc
+} from "../../../scripts/test-runtime";
+
 const ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const ANVIL_DEPLOYER_PRIVATE_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
-
-function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const cleaned = {} as NodeJS.ProcessEnv;
-  for (const [key, value] of Object.entries(env)) {
-    if (typeof value === "string") {
-      cleaned[key] = value;
-    }
-  }
-  return cleaned;
-}
 
 function withSchema(databaseUrl: string, schema: string): string {
   const parsed = new URL(databaseUrl);
   parsed.searchParams.set("schema", schema);
   return parsed.toString();
-}
-
-function prefixedLogger(label: string, payload: Buffer): void {
-  const text = payload.toString();
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) {
-      continue;
-    }
-    console.log(`[integration:${label}] ${line}`);
-  }
-}
-
-async function runCommand(
-  command: string,
-  args: string[],
-  options: {
-    cwd: string;
-    env: NodeJS.ProcessEnv;
-    label: string;
-  }
-): Promise<void> {
-  await new Promise<void>((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: cleanEnv(options.env),
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-
-    let stderr = "";
-
-    child.stdout?.on("data", (chunk: Buffer) => prefixedLogger(options.label, chunk));
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-      prefixedLogger(options.label, chunk);
-    });
-
-    child.on("error", rejectPromise);
-
-    child.on("exit", (code: number | null) => {
-      if (code === 0) {
-        resolvePromise();
-        return;
-      }
-
-      rejectPromise(
-        new Error(
-          `Command failed (${options.label}): ${command} ${args.join(" ")} (exit ${code})\n${stderr}`
-        )
-      );
-    });
-  });
-}
-
-async function waitForHttp(url: string, timeoutMs = 90_000): Promise<void> {
-  const start = Date.now();
-  let lastError: unknown;
-
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      if (response.ok) {
-        return;
-      }
-      lastError = new Error(`status ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-
-    await delay(500);
-  }
-
-  throw new Error(`Timed out waiting for ${url}. Last error: ${String(lastError)}`);
-}
-
-async function waitForJsonRpc(rpcUrl: string, timeoutMs = 45_000): Promise<void> {
-  const start = Date.now();
-  let lastError: unknown;
-
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "eth_chainId",
-          params: []
-        })
-      });
-
-      if (response.ok) {
-        return;
-      }
-      lastError = new Error(`status ${response.status}`);
-    } catch (error) {
-      lastError = error;
-    }
-
-    await delay(300);
-  }
-
-  throw new Error(`Timed out waiting for JSON-RPC at ${rpcUrl}. Last error: ${String(lastError)}`);
-}
-
-async function stopProcess(child: ChildProcess | null, label: string): Promise<void> {
-  if (!child || child.killed) {
-    return;
-  }
-
-  const exited = new Promise<void>((resolvePromise) => {
-    child.once("exit", () => resolvePromise());
-  });
-
-  child.kill("SIGTERM");
-
-  await Promise.race([exited, delay(5_000)]);
-
-  if (child.exitCode === null && !child.killed) {
-    child.kill("SIGKILL");
-  }
-
-  if (child.exitCode === null) {
-    await Promise.race([exited, delay(5_000)]);
-  }
-
-  console.log(`[integration:${label}] stopped`);
-}
-
-function spawnLongRunning(
-  label: string,
-  command: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv
-): ChildProcess {
-  const child = spawn(command, args, {
-    cwd,
-    env: cleanEnv(env),
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-
-  child.stdout?.on("data", (chunk: Buffer) => prefixedLogger(label, chunk));
-  child.stderr?.on("data", (chunk: Buffer) => prefixedLogger(label, chunk));
-
-  child.on("error", (error: Error) => {
-    console.error(`[integration:${label}] process error: ${String(error)}`);
-  });
-
-  return child;
 }
 
 function buildChain(rpcUrl: string) {
@@ -214,10 +67,20 @@ export default async function integrationGlobalSetup() {
   const schema = `itest_${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
   const testDatabaseUrl = withSchema(baseDatabaseUrl, schema);
 
-  const anvilPort = Number(process.env.SQR_ANVIL_PORT || "8545");
-  const appPort = Number(process.env.SQR_TEST_PORT || "3111");
+  const anvilPort = await resolvePort({
+    envName: "SQR_ANVIL_PORT",
+    label: "Integration anvil"
+  });
+  const appPort = await resolvePort({
+    envName: "SQR_TEST_PORT",
+    label: "Integration app"
+  });
+
   const baseUrl = `http://127.0.0.1:${appPort}`;
   const rpcUrl = `http://127.0.0.1:${anvilPort}`;
+  const runScopedDistDir = createRunScopedDistDir("integration");
+  const runScopeRoot = getRunScopeRoot(runScopedDistDir);
+  const runScopedTsconfig = await createRunScopedTsconfig(runScopedDistDir);
 
   const redisRequested = process.env.SQR_WITH_REDIS === "1";
   const redisUrl = redisRequested ? process.env.REDIS_URL : undefined;
@@ -225,44 +88,77 @@ export default async function integrationGlobalSetup() {
     throw new Error("SQR_WITH_REDIS=1 requires REDIS_URL to be set");
   }
 
+  console.log(`[integration] using app port ${appPort}, anvil port ${anvilPort}`);
+
   let anvilProcess: ChildProcess | null = null;
   let nextProcess: ChildProcess | null = null;
   let workerProcess: ChildProcess | null = null;
 
-  try {
-    await runCommand(
-      process.execPath,
-      [resolve(ROOT, "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"],
-      {
-        cwd: ROOT,
-        env: {
-          ...process.env,
-          DATABASE_URL: testDatabaseUrl
-        },
-        label: "prisma-db-push"
-      }
-    );
+  const cleanupController = createCleanupController({
+    label: "integration",
+    cleanup: async () => {
+      await stopProcessTree(workerProcess, "integration:worker");
+      await stopProcessTree(nextProcess, "integration:next");
+      await stopProcessTree(anvilProcess, "integration:anvil");
 
-    anvilProcess = spawnLongRunning(
-      "anvil",
-      "anvil",
-      [
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(anvilPort),
-        "--chain-id",
-        "8453"
-      ],
-      ROOT,
-      process.env
-    );
+      const adminDatabaseUrl = withSchema(baseDatabaseUrl, "public");
+      const prisma = new PrismaClient({
+        datasources: {
+          db: {
+            url: adminDatabaseUrl
+          }
+        }
+      });
+
+      try {
+        await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      } finally {
+        await prisma.$disconnect();
+      }
+
+      try {
+        await removeDirectoryWithRetries(resolve(ROOT, runScopeRoot));
+      } catch (error) {
+        console.warn(`[integration] failed to remove ${runScopeRoot}: ${String(error)}`);
+      }
+
+      try {
+        await removeFileIfExists(resolve(ROOT, runScopedTsconfig));
+      } catch (error) {
+        console.warn(`[integration] failed to remove ${runScopedTsconfig}: ${String(error)}`);
+      }
+    }
+  });
+
+  cleanupController.register();
+
+  try {
+    await runCommand({
+      prefix: "integration:prisma-db-push",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/prisma/build/index.js"), "db", "push", "--skip-generate"],
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        DATABASE_URL: testDatabaseUrl
+      }
+    });
+
+    anvilProcess = spawnLongRunningProcess({
+      prefix: "integration:anvil",
+      command: "anvil",
+      args: ["--host", "127.0.0.1", "--port", String(anvilPort), "--chain-id", "8453"],
+      cwd: ROOT,
+      env: process.env
+    });
     await waitForJsonRpc(rpcUrl);
 
-    await runCommand("forge", ["build"], {
+    await runCommand({
+      prefix: "integration:forge-build",
+      command: "forge",
+      args: ["build"],
       cwd: ROOT,
-      env: process.env,
-      label: "forge-build"
+      env: process.env
     });
 
     const artifactPath = resolve(ROOT, "contracts/out/ReceiptRegistry.sol/ReceiptRegistry.json");
@@ -311,35 +207,30 @@ export default async function integrationGlobalSetup() {
       RECEIPT_CONTRACT_ADDRESS: receiptContractAddress,
       ENABLE_SLITHER: "true",
       OPENAI_API_KEY: "",
-      REDIS_URL: redisUrl || ""
+      REDIS_URL: redisUrl || "",
+      SQR_NEXT_DIST_DIR: runScopedDistDir,
+      SQR_NEXT_TSCONFIG: runScopedTsconfig
     };
 
-    nextProcess = spawnLongRunning(
-      "next",
-      process.execPath,
-      [
-        resolve(ROOT, "node_modules/next/dist/bin/next"),
-        "dev",
-        "-p",
-        String(appPort),
-        "-H",
-        "127.0.0.1"
-      ],
-      ROOT,
-      appEnv
-    );
+    nextProcess = spawnLongRunningProcess({
+      prefix: "integration:next",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "dev", "-p", String(appPort), "-H", "127.0.0.1"],
+      cwd: ROOT,
+      env: appEnv
+    });
 
     await waitForHttp(`${baseUrl}/api/v1/session`);
 
     if (redisRequested) {
       const tsxCli = resolve(ROOT, "node_modules/tsx/dist/cli.mjs");
-      workerProcess = spawnLongRunning(
-        "worker",
-        process.execPath,
-        [tsxCli, resolve(ROOT, "scripts/worker.ts")],
-        ROOT,
-        appEnv
-      );
+      workerProcess = spawnLongRunningProcess({
+        prefix: "integration:worker",
+        command: process.execPath,
+        args: [tsxCli, resolve(ROOT, "scripts/worker.ts")],
+        cwd: ROOT,
+        env: appEnv
+      });
       await delay(500);
     }
 
@@ -353,29 +244,12 @@ export default async function integrationGlobalSetup() {
     process.env.SQR_TEST_WITH_REDIS = redisRequested ? "1" : "0";
 
     return async () => {
-      await stopProcess(workerProcess, "worker");
-      await stopProcess(nextProcess, "next");
-      await stopProcess(anvilProcess, "anvil");
-
-      const adminDatabaseUrl = withSchema(baseDatabaseUrl, "public");
-      const prisma = new PrismaClient({
-        datasources: {
-          db: {
-            url: adminDatabaseUrl
-          }
-        }
-      });
-
-      try {
-        await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-      } finally {
-        await prisma.$disconnect();
-      }
+      cleanupController.unregister();
+      await cleanupController.run();
     };
   } catch (error) {
-    await stopProcess(workerProcess, "worker");
-    await stopProcess(nextProcess, "next");
-    await stopProcess(anvilProcess, "anvil");
+    cleanupController.unregister();
+    await cleanupController.run();
     throw error;
   }
 }

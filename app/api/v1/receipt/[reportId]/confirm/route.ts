@@ -4,7 +4,11 @@ import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { config } from "@/lib/config";
 import { prisma } from "@/lib/db";
-import { explorerTxUrl, readMintedEventFromTx } from "@/lib/receipt";
+import {
+  explorerTxUrl,
+  readMintedEventFromTx,
+  recoverMintAuthorizationSigner
+} from "@/lib/receipt";
 import { getSessionContext } from "@/lib/session";
 import { receiptConfirmSchema } from "@/lib/validation";
 
@@ -45,6 +49,14 @@ export async function POST(
       return fail(403, "FORBIDDEN", "Only owner can confirm receipt");
     }
 
+    if (!session.walletAddress) {
+      return fail(401, "WALLET_REQUIRED", "Wallet login is required for receipt confirmation");
+    }
+
+    if (session.walletAddress.toLowerCase() !== payload.owner.toLowerCase()) {
+      return fail(403, "OWNER_MISMATCH", "Signed owner must match connected wallet");
+    }
+
     if (report.receipt) {
       return ok({
         existing: true,
@@ -53,15 +65,36 @@ export async function POST(
       });
     }
 
-    const eventData = await readMintedEventFromTx(payload.txHash).catch(() => null);
-
-    if (eventData && eventData.reportHash.toLowerCase() !== report.reportHash.toLowerCase()) {
-      return fail(400, "HASH_MISMATCH", "Transaction event reportHash does not match this report");
-    }
-
     const reportJson = report.reportJson as {
       metadata?: { contractAddress?: string };
     };
+
+    const eventData = await readMintedEventFromTx(payload.txHash).catch(() => null);
+
+    if (!eventData) {
+      return fail(400, "MINT_EVENT_NOT_FOUND", "ReceiptMinted event not found for this transaction");
+    }
+
+    if (eventData.reportHash.toLowerCase() !== report.reportHash.toLowerCase()) {
+      return fail(400, "HASH_MISMATCH", "Transaction event reportHash does not match this report");
+    }
+
+    const recoveredOwner = await recoverMintAuthorizationSigner({
+      reportHash: report.reportHash,
+      contractAddress: reportJson.metadata?.contractAddress ?? null,
+      owner: payload.owner,
+      nonce: payload.nonce,
+      deadline: payload.deadline,
+      signature: payload.signature
+    });
+
+    if (recoveredOwner.toLowerCase() !== payload.owner.toLowerCase()) {
+      return fail(400, "INVALID_SIGNATURE", "Mint authorization signature is invalid");
+    }
+
+    if (eventData.owner.toLowerCase() !== recoveredOwner.toLowerCase()) {
+      return fail(400, "OWNER_MISMATCH", "Transaction event owner does not match signed owner");
+    }
 
     const created = await prisma.receipt.create({
       data: {
@@ -69,11 +102,12 @@ export async function POST(
         reportHash: report.reportHash,
         txHash: payload.txHash,
         chainId: config.BASE_CHAIN_ID,
-        contractAddress:
-          eventData?.contractAddress || reportJson.metadata?.contractAddress || "0x0000000000000000000000000000000000000000",
-        receiptId: eventData?.receiptId || "0",
-        mintedBy: eventData?.owner || session.walletAddress || "0x0000000000000000000000000000000000000000",
-        mintedAt: eventData?.timestamp || new Date()
+        contractAddress: eventData.contractAddress,
+        receiptId: eventData.receiptId,
+        mintedBy: eventData.minter,
+        receiptOwner: eventData.owner,
+        receiptMinter: eventData.minter,
+        mintedAt: eventData.timestamp
       }
     });
 

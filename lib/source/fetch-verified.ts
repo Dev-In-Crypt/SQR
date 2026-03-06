@@ -17,6 +17,12 @@ interface BaseScanResultItem {
   SwarmSource: string;
 }
 
+interface BaseScanPayload {
+  status: string;
+  message: string;
+  result: BaseScanResultItem[] | string;
+}
+
 interface VerifiedSourceResponse {
   verified: boolean;
   files: SourceFile[];
@@ -53,11 +59,66 @@ function extractFilesFromBaseScanSource(sourceCode: string): SourceFile[] {
   return [{ path: "Contract.sol", content: sourceCode }];
 }
 
-async function fetchFromBaseScan(address: string): Promise<VerifiedSourceResponse> {
-  const url = new URL(config.BASESCAN_API_URL);
+function resolveBaseScanApiUrl(configuredUrl: string): string {
+  const trimmed = configuredUrl.trim();
+  if (!trimmed) {
+    return "https://api.etherscan.io/v2/api";
+  }
+
+  if (trimmed.includes("/v2/")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+
+    // BaseScan's old v1 host should route through Etherscan v2.
+    if (parsed.hostname.includes("basescan.org")) {
+      return "https://api.etherscan.io/v2/api";
+    }
+
+    if (parsed.pathname.endsWith("/api")) {
+      parsed.pathname = `${parsed.pathname.slice(0, -4)}/v2/api`;
+      return parsed.toString();
+    }
+  } catch {
+    // Fall through to raw URL.
+  }
+
+  return trimmed;
+}
+
+function classifyBaseScanReason(reason: string): string {
+  const normalized = reason.toLowerCase();
+
+  if (
+    normalized.includes("contract source code not verified") ||
+    normalized.includes("unable to locate contractcode")
+  ) {
+    return "SOURCE_UNVERIFIED";
+  }
+
+  if (normalized.includes("missing/invalid api key") || normalized.includes("invalid api key")) {
+    return "BASESCAN_INVALID_API_KEY";
+  }
+
+  if (normalized.includes("rate limit")) {
+    return "BASESCAN_RATE_LIMIT";
+  }
+
+  if (normalized.includes("deprecated v1 endpoint")) {
+    return "BASESCAN_V1_DEPRECATED";
+  }
+
+  return "BASESCAN_NOTOK";
+}
+
+async function fetchFromBaseScan(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+  const url = new URL(resolveBaseScanApiUrl(config.BASESCAN_API_URL));
   url.searchParams.set("module", "contract");
   url.searchParams.set("action", "getsourcecode");
   url.searchParams.set("address", address);
+  url.searchParams.set("chainid", String(chainId));
 
   if (config.BASESCAN_API_KEY) {
     url.searchParams.set("apikey", config.BASESCAN_API_KEY);
@@ -72,23 +133,43 @@ async function fetchFromBaseScan(address: string): Promise<VerifiedSourceRespons
     return {
       verified: false,
       files: [],
-      metadata: {},
+      metadata: {
+        sourceProvider: "basescan-v2",
+        url: url.toString()
+      },
       reason: `BASESCAN_HTTP_${response.status}`
     };
   }
 
-  const payload = (await response.json()) as {
-    status: string;
-    message: string;
-    result: BaseScanResultItem[];
-  };
+  const payload = (await response.json()) as BaseScanPayload;
+
+  if (payload.status !== "1" || !Array.isArray(payload.result)) {
+    const reasonMessage =
+      typeof payload.result === "string" && payload.result.trim().length > 0
+        ? payload.result
+        : payload.message || "NOTOK";
+
+    return {
+      verified: false,
+      files: [],
+      metadata: {
+        sourceProvider: "basescan-v2",
+        status: payload.status,
+        message: payload.message,
+        reasonMessage
+      },
+      reason: classifyBaseScanReason(reasonMessage)
+    };
+  }
 
   const item = payload.result?.[0];
   if (!item || !item.SourceCode || item.SourceCode.trim().length === 0) {
     return {
       verified: false,
       files: [],
-      metadata: {},
+      metadata: {
+        sourceProvider: "basescan-v2"
+      },
       reason: "SOURCE_UNVERIFIED"
     };
   }
@@ -99,7 +180,7 @@ async function fetchFromBaseScan(address: string): Promise<VerifiedSourceRespons
     verified: files.length > 0,
     files,
     metadata: {
-      sourceProvider: "basescan",
+      sourceProvider: "basescan-v2",
       contractName: item.ContractName,
       compilerVersion: item.CompilerVersion,
       optimizationUsed: item.OptimizationUsed,
@@ -166,7 +247,7 @@ export async function fetchVerifiedSource(params: {
 }): Promise<VerifiedSourceResponse> {
   const { chainId, address } = params;
 
-  const basescan = await fetchFromBaseScan(address);
+  const basescan = await fetchFromBaseScan(chainId, address);
   if (basescan.verified) {
     return basescan;
   }
@@ -176,6 +257,9 @@ export async function fetchVerifiedSource(params: {
     return sourcify;
   }
 
+  const reasons = [basescan.reason, sourcify.reason].filter((value): value is string => Boolean(value));
+  const preferredReason = reasons.find((value) => value !== "SOURCE_UNVERIFIED") ?? "SOURCE_UNVERIFIED";
+
   return {
     verified: false,
     files: [],
@@ -183,6 +267,6 @@ export async function fetchVerifiedSource(params: {
       basescanReason: basescan.reason,
       sourcifyReason: sourcify.reason
     },
-    reason: "SOURCE_UNVERIFIED"
+    reason: preferredReason
   };
 }

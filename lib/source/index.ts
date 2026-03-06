@@ -117,7 +117,11 @@ export async function sourceBundleFromAddress(params: {
   });
 
   if (!verified.verified) {
-    throw new ApiError(422, "SOURCE_UNVERIFIED", "Verified source is not available for this contract");
+    throw new ApiError(
+      422,
+      verified.reason || "SOURCE_UNVERIFIED",
+      "Verified source is not available for this contract"
+    );
   }
 
   const lineCount = verified.files.reduce((sum, file) => sum + countLines(file.content), 0);

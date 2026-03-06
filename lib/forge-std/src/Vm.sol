@@ -29,6 +29,9 @@ interface Vm {
     function startPrank(address msgSender) external;
     function stopPrank() external;
     function assume(bool condition) external;
+    function addr(uint256 privateKey) external returns (address keyAddr);
+    function sign(uint256 privateKey, bytes32 digest) external returns (uint8 v, bytes32 r, bytes32 s);
     function targetContract(address target) external;
 }
+
 

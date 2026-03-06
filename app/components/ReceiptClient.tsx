@@ -12,6 +12,8 @@ interface ReceiptView {
     contractAddress: string;
     receiptId: string;
     mintedBy: string;
+    receiptOwner: string;
+    receiptMinter: string;
     mintedAt: string;
   } | null;
   report: {
@@ -74,7 +76,10 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
               <strong>contractAddress:</strong> {data.receipt.contractAddress}
             </div>
             <div>
-              <strong>mintedBy:</strong> {data.receipt.mintedBy}
+              <strong>owner (signed):</strong> {data.receipt.receiptOwner}
+            </div>
+            <div>
+              <strong>minter (tx sender):</strong> {data.receipt.receiptMinter}
             </div>
             <div>
               <strong>mintedAt:</strong> {new Date(data.receipt.mintedAt).toLocaleString()}
@@ -100,10 +105,10 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
       </div>
 
       <div className="card">
-        <strong>What this proves:</strong> a wallet submitted this report hash on Base at a specific time.
+        <strong>What this proves:</strong> the signed owner authorized this report hash, and a minter wallet submitted it on Base at a specific time.
         <br />
         <strong>What this does not prove:</strong> code correctness, exploit absence, or ownership of the target
-        contract beyond transaction sender context.
+        contract beyond the explicit signed owner identity.
       </div>
 
       {error ? <div className="card error">{error}</div> : null}

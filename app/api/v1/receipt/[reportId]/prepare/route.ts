@@ -1,7 +1,7 @@
 import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
-import { prepareMintTransaction } from "@/lib/receipt";
+import { prepareMintAuthorization } from "@/lib/receipt";
 import { getSessionContext } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -40,6 +40,10 @@ export async function POST(
       return fail(403, "FORBIDDEN", "Only owner can mint receipt");
     }
 
+    if (!session.walletAddress) {
+      return fail(401, "WALLET_REQUIRED", "Wallet login is required for receipt minting");
+    }
+
     if (report.receipt) {
       return ok({
         existing: true,
@@ -51,14 +55,17 @@ export async function POST(
       metadata?: { contractAddress?: string };
     };
 
-    const tx = prepareMintTransaction({
+    const prepared = await prepareMintAuthorization({
       reportHash: report.reportHash,
-      contractAddress: reportJson.metadata?.contractAddress ?? null
+      contractAddress: reportJson.metadata?.contractAddress ?? null,
+      owner: session.walletAddress,
+      ttlSeconds: 10 * 60
     });
 
     return ok({
       existing: false,
-      tx
+      typedData: prepared.typedData,
+      call: prepared.call
     });
   } catch (error) {
     return handleRouteError(error, {

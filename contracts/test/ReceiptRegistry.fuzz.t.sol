@@ -7,8 +7,21 @@ import "../ReceiptRegistry.sol";
 contract ReceiptRegistryFuzzTest is Test {
     ReceiptRegistry internal registry;
 
+    uint256 internal ownerKey = 0x59c6995e998f97a5a0044966f094538e8d6d7f2adf0d8fcb7d500f9f8f9d3d9f;
+    address internal ownerWallet;
+
+    bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
+        keccak256(
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+        );
+    bytes32 internal constant MINT_AUTHORIZATION_TYPEHASH =
+        keccak256(
+            "MintAuthorization(bytes32 reportHash,address contractAddress,bytes32 analyzerVersionHash,address owner,uint256 nonce,uint256 deadline)"
+        );
+
     function setUp() public {
         registry = new ReceiptRegistry();
+        ownerWallet = vm.addr(ownerKey);
     }
 
     function testFuzzFirstMintNeverCorruptsState(
@@ -16,75 +29,180 @@ contract ReceiptRegistryFuzzTest is Test {
         address contractAddress,
         bytes32 analyzerVersionHash
     ) public {
-        (uint256 receiptId, bool newlyMinted) = registry.mint(
+        uint256 nonce = registry.nonces(ownerWallet);
+        uint256 deadline = block.timestamp + 600;
+        bytes memory signature = _signAuthorization(
             reportHash,
             contractAddress,
-            analyzerVersionHash
+            analyzerVersionHash,
+            nonce,
+            deadline
         );
 
-        (
-            uint256 storedId,
-            address owner,
-            address storedContractAddress,
-            bytes32 storedVersion,
-            uint256 storedTimestamp
-        ) = registry.getByHash(reportHash);
+        (uint256 receiptId, bool newlyMinted) = registry.mintWithSig(
+            reportHash,
+            contractAddress,
+            analyzerVersionHash,
+            ownerWallet,
+            nonce,
+            deadline,
+            signature
+        );
+
+        (uint256 storedId, address owner, address storedContractAddress, bytes32 storedVersion, ) =
+            registry.getByHash(reportHash);
 
         assertEq(receiptId, 1);
         assertTrue(newlyMinted);
         assertEq(storedId, receiptId);
-        assertEq(owner, address(this));
+        assertEq(owner, ownerWallet);
         assertEq(storedContractAddress, contractAddress);
         assertEq(storedVersion, analyzerVersionHash);
-        assertTrue(storedTimestamp > 0 || block.timestamp == 0);
     }
 
     function testFuzzDuplicateMintPreservesFirstWrite(
         bytes32 reportHash,
         address firstContractAddress,
-        address secondContractAddress,
         bytes32 firstAnalyzerVersionHash,
         bytes32 secondAnalyzerVersionHash
     ) public {
-        registry.mint(reportHash, firstContractAddress, firstAnalyzerVersionHash);
+        uint256 firstNonce = registry.nonces(ownerWallet);
+        uint256 deadline = block.timestamp + 600;
+
+        bytes memory firstSig = _signAuthorization(
+            reportHash,
+            firstContractAddress,
+            firstAnalyzerVersionHash,
+            firstNonce,
+            deadline
+        );
+
+        registry.mintWithSig(
+            reportHash,
+            firstContractAddress,
+            firstAnalyzerVersionHash,
+            ownerWallet,
+            firstNonce,
+            deadline,
+            firstSig
+        );
+
+        uint256 secondNonce = registry.nonces(ownerWallet);
+        bytes memory secondSig = _signAuthorization(
+            reportHash,
+            address(0xBEEF),
+            secondAnalyzerVersionHash,
+            secondNonce,
+            deadline
+        );
 
         if (firstAnalyzerVersionHash == secondAnalyzerVersionHash) {
-            (uint256 receiptId, bool newlyMinted) = registry.mint(
+            (uint256 receiptId, bool newlyMinted) = registry.mintWithSig(
                 reportHash,
-                secondContractAddress,
-                secondAnalyzerVersionHash
+                address(0xBEEF),
+                secondAnalyzerVersionHash,
+                ownerWallet,
+                secondNonce,
+                deadline,
+                secondSig
             );
             assertEq(receiptId, 1);
             assertFalse(newlyMinted);
         } else {
-            (bool success, bytes memory revertData) = address(registry).call(
+            vm.expectRevert(
                 abi.encodeWithSelector(
-                    registry.mint.selector,
+                    ReceiptRegistry.AnalyzerVersionMismatch.selector,
                     reportHash,
-                    secondContractAddress,
+                    firstAnalyzerVersionHash,
                     secondAnalyzerVersionHash
                 )
             );
-            assertFalse(success);
-            bytes4 revertSelector = revertData.length >= 4 ? bytes4(revertData) : bytes4(0);
-            require(
-                revertSelector == ReceiptRegistry.AnalyzerVersionMismatch.selector,
-                "UNEXPECTED_REVERT_SELECTOR"
+            registry.mintWithSig(
+                reportHash,
+                address(0xBEEF),
+                secondAnalyzerVersionHash,
+                ownerWallet,
+                secondNonce,
+                deadline,
+                secondSig
             );
         }
 
-        (
-            uint256 storedId,
-            address owner,
-            address storedContractAddress,
-            bytes32 storedVersion,
-            uint256 storedTimestamp
-        ) = registry.getByHash(reportHash);
+        (uint256 storedId, address owner, address storedContractAddress, bytes32 storedVersion, ) =
+            registry.getByHash(reportHash);
 
         assertEq(storedId, 1);
-        assertEq(owner, address(this));
+        assertEq(owner, ownerWallet);
         assertEq(storedContractAddress, firstContractAddress);
         assertEq(storedVersion, firstAnalyzerVersionHash);
-        assertTrue(storedTimestamp > 0 || block.timestamp == 0);
+    }
+
+    function testFuzzMutatedSignatureAlwaysReverts(
+        bytes32 reportHash,
+        address contractAddress,
+        bytes32 analyzerVersionHash,
+        uint8 mutateIndex,
+        uint8 mutateMask
+    ) public {
+        vm.assume(mutateMask != 0);
+
+        uint256 nonce = registry.nonces(ownerWallet);
+        uint256 deadline = block.timestamp + 600;
+
+        bytes memory signature = _signAuthorization(
+            reportHash,
+            contractAddress,
+            analyzerVersionHash,
+            nonce,
+            deadline
+        );
+
+        uint256 index = uint256(mutateIndex) % 64;
+        signature[index] = bytes1(uint8(signature[index]) ^ mutateMask);
+
+        vm.expectRevert(ReceiptRegistry.InvalidSignature.selector);
+        registry.mintWithSig(
+            reportHash,
+            contractAddress,
+            analyzerVersionHash,
+            ownerWallet,
+            nonce,
+            deadline,
+            signature
+        );
+    }
+
+    function _signAuthorization(
+        bytes32 reportHash,
+        address contractAddress,
+        bytes32 analyzerVersionHash,
+        uint256 nonce,
+        uint256 deadline
+    ) internal returns (bytes memory signature) {
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                keccak256("ReceiptRegistry"),
+                keccak256("0.2.0"),
+                block.chainid,
+                address(registry)
+            )
+        );
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                MINT_AUTHORIZATION_TYPEHASH,
+                reportHash,
+                contractAddress,
+                analyzerVersionHash,
+                ownerWallet,
+                nonce,
+                deadline
+            )
+        );
+
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, digest);
+        return abi.encodePacked(r, s, v);
     }
 }

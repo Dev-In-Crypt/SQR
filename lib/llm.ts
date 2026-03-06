@@ -1,4 +1,4 @@
-﻿import type { Finding } from "@/lib/types";
+import type { Finding } from "@/lib/types";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
@@ -61,19 +61,32 @@ export async function generateExecutiveSummary(params: {
     ]
   };
 
+  const baseUrl = config.OPENAI_BASE_URL.replace(/\/$/, "");
+  const endpoint = `${baseUrl}/chat/completions`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${config.OPENAI_API_KEY}`
+  };
+
+  if (config.OPENAI_HTTP_REFERER) {
+    headers["HTTP-Referer"] = config.OPENAI_HTTP_REFERER;
+  }
+
+  if (config.OPENAI_APP_NAME) {
+    headers["X-Title"] = config.OPENAI_APP_NAME;
+  }
+
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.OPENAI_API_KEY}`
-      },
+      headers,
       body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
       const body = await response.text();
-      logError("LLM request failed", { status: response.status, body });
+      logError("LLM request failed", { status: response.status, body, endpoint });
       return localExecutiveSummary(findings, partialReasons);
     }
 
@@ -89,7 +102,8 @@ export async function generateExecutiveSummary(params: {
     return content;
   } catch (error) {
     logError("LLM request exception", {
-      message: error instanceof Error ? error.message : String(error)
+      message: error instanceof Error ? error.message : String(error),
+      endpoint
     });
     return localExecutiveSummary(findings, partialReasons);
   }

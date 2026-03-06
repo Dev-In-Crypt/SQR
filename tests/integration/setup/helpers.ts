@@ -7,14 +7,21 @@ import {
   createWalletClient,
   decodeEventLog,
   defineChain,
+  encodeFunctionData,
   http,
   isAddress,
+  parseAbi,
   parseAbiItem,
+  type Address,
   type Hex
 } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 const DEFAULT_CHAIN_ID = Number(process.env.SQR_TEST_CHAIN_ID || "8453");
+
+const receiptRegistryAbi = parseAbi([
+  "function mintWithSig(bytes32 reportHash, address contractAddress, bytes32 analyzerVersionHash, address owner, uint256 nonce, uint256 deadline, bytes signature) returns (uint256 receiptId, bool newlyMinted)"
+]);
 
 function mustEnv(name: string): string {
   const value = process.env[name];
@@ -344,13 +351,97 @@ export function testChain() {
   });
 }
 
+export interface PreparedMintCall {
+  to: Address;
+  chainId: number;
+  functionName: "mintWithSig";
+  args: {
+    reportHash: Hex;
+    contractAddress: Address;
+    analyzerVersionHash: Hex;
+    owner: Address;
+    nonce: string;
+    deadline: string;
+  };
+}
+
+export interface PreparedMintTypedData {
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: Address;
+  };
+  primaryType: "MintAuthorization";
+  types: {
+    EIP712Domain: Array<{ name: string; type: string }>;
+    MintAuthorization: Array<{ name: string; type: string }>;
+  };
+  message: {
+    reportHash: Hex;
+    contractAddress: Address;
+    analyzerVersionHash: Hex;
+    owner: Address;
+    nonce: string;
+    deadline: string;
+  };
+}
+
+export interface PreparedMintPayload {
+  typedData: PreparedMintTypedData;
+  call: PreparedMintCall;
+}
+
+export async function signPreparedMintAuthorization(params: {
+  prepared: PreparedMintPayload;
+  ownerPrivateKey: Hex;
+}): Promise<Hex> {
+  const account = privateKeyToAccount(params.ownerPrivateKey);
+
+  return account.signTypedData({
+    domain: params.prepared.typedData.domain,
+    types: {
+      MintAuthorization: params.prepared.typedData.types.MintAuthorization
+    },
+    primaryType: "MintAuthorization",
+    message: {
+      reportHash: params.prepared.typedData.message.reportHash,
+      contractAddress: params.prepared.typedData.message.contractAddress,
+      analyzerVersionHash: params.prepared.typedData.message.analyzerVersionHash,
+      owner: params.prepared.typedData.message.owner,
+      nonce: BigInt(params.prepared.typedData.message.nonce),
+      deadline: BigInt(params.prepared.typedData.message.deadline)
+    }
+  });
+}
+
+export function encodePreparedMintCall(params: {
+  prepared: PreparedMintPayload;
+  signature: Hex;
+}): Hex {
+  return encodeFunctionData({
+    abi: receiptRegistryAbi,
+    functionName: "mintWithSig",
+    args: [
+      params.prepared.call.args.reportHash,
+      params.prepared.call.args.contractAddress,
+      params.prepared.call.args.analyzerVersionHash,
+      params.prepared.call.args.owner,
+      BigInt(params.prepared.call.args.nonce),
+      BigInt(params.prepared.call.args.deadline),
+      params.signature
+    ]
+  });
+}
+
 export async function sendPreparedReceiptMint(params: {
   to: Hex;
   data: Hex;
   chainId: number;
+  privateKey?: Hex;
 }): Promise<Hex> {
   const rpcUrl = mustEnv("SQR_TEST_RPC_URL");
-  const privateKey = mustEnv("SQR_TEST_MINT_PRIVATE_KEY") as Hex;
+  const privateKey = params.privateKey || (mustEnv("SQR_TEST_MINT_PRIVATE_KEY") as Hex);
   const chain = testChain();
   const account = privateKeyToAccount(privateKey);
 
@@ -381,14 +472,40 @@ export async function sendPreparedReceiptMint(params: {
   return hash;
 }
 
+export async function sendSignedPreparedReceiptMint(params: {
+  prepared: PreparedMintPayload;
+  ownerPrivateKey: Hex;
+  submitterPrivateKey?: Hex;
+}): Promise<{ txHash: Hex; signature: Hex }> {
+  const signature = await signPreparedMintAuthorization({
+    prepared: params.prepared,
+    ownerPrivateKey: params.ownerPrivateKey
+  });
+
+  const data = encodePreparedMintCall({
+    prepared: params.prepared,
+    signature
+  });
+
+  const txHash = await sendPreparedReceiptMint({
+    to: params.prepared.call.to,
+    data,
+    chainId: params.prepared.call.chainId,
+    privateKey: params.submitterPrivateKey
+  });
+
+  return { txHash, signature };
+}
+
 const receiptMintedEvent = parseAbiItem(
-  "event ReceiptMinted(bytes32 indexed reportHash, address indexed contractAddress, bytes32 analyzerVersionHash, address owner, uint256 timestamp, uint256 receiptId)"
+  "event ReceiptMinted(bytes32 indexed reportHash, address indexed contractAddress, bytes32 analyzerVersionHash, address owner, address minter, uint256 timestamp, uint256 receiptId)"
 );
 
 export async function readMintedEventFromTx(txHash: Hex): Promise<{
   reportHash: Hex;
   contractAddress: Hex;
   owner: Hex;
+  minter: Hex;
   receiptId: bigint;
 } | null> {
   const rpcUrl = mustEnv("SQR_TEST_RPC_URL");
@@ -417,6 +534,7 @@ export async function readMintedEventFromTx(txHash: Hex): Promise<{
         reportHash: decoded.args.reportHash,
         contractAddress: decoded.args.contractAddress,
         owner: decoded.args.owner,
+        minter: decoded.args.minter,
         receiptId: decoded.args.receiptId
       };
     } catch {

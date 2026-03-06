@@ -1,6 +1,7 @@
 # Node / Next
 node_modules/
 .next/
+.next-test/
 dist/
 coverage/
 *.tsbuildinfo
@@ -76,4 +77,5 @@ Thumbs.db
 # Local planning markdown
 Plan.md
 NewPlan.md
+
 

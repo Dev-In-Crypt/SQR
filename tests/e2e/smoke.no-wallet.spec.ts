@@ -64,6 +64,8 @@ test("suite A smoke: paste -> private link -> publish/unpublish -> filter/expand
   await privateViewerContext.close();
 
   await page.getByRole("button", { name: "Publish report" }).click();
+  await expect(page.getByRole("button", { name: "Publish report" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Make private" })).toBeEnabled();
 
   const publicViewerContext = await browser.newContext();
   const publicViewerPage = await publicViewerContext.newPage();
@@ -72,6 +74,8 @@ test("suite A smoke: paste -> private link -> publish/unpublish -> filter/expand
   await publicViewerContext.close();
 
   await page.getByRole("button", { name: "Make private" }).click();
+  await expect(page.getByRole("button", { name: "Publish report" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Make private" })).toBeDisabled();
 
   const deniedContext = await browser.newContext();
   const deniedPage = await deniedContext.newPage();

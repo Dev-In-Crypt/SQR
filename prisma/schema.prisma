@@ -146,6 +146,8 @@ model Receipt {
   contractAddress  String
   receiptId        String
   mintedBy         String
+  receiptOwner     String?
+  receiptMinter    String?
   mintedAt         DateTime
   createdAt        DateTime @default(now())
 
@@ -178,6 +180,8 @@ model RateLimitSnapshot {
   @@index([date, wallet])
   @@map("rate_limits")
 }
+
+
 
 
 

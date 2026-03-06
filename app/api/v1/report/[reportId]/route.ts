@@ -48,6 +48,13 @@ export async function GET(
     }
 
     const owner = isReportOwner(report, viewer);
+    const receipt = report.receipt
+      ? {
+          ...report.receipt,
+          receiptOwner: report.receipt.receiptOwner || report.receipt.mintedBy,
+          receiptMinter: report.receipt.receiptMinter || report.receipt.mintedBy
+        }
+      : null;
 
     return ok({
       reportId: report.id,
@@ -59,7 +66,7 @@ export async function GET(
       isOwner: owner,
       report: report.reportJson,
       findings: report.findings,
-      receipt: report.receipt,
+      receipt,
       analysis: {
         inputType: report.analysis.inputType,
         chainId: report.analysis.chainId

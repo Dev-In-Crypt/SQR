@@ -12,6 +12,14 @@ import { createAnalysisSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
+const NON_FATAL_SOURCE_ERROR_CODES = new Set([
+  "SOURCE_UNVERIFIED",
+  "BASESCAN_INVALID_API_KEY",
+  "BASESCAN_RATE_LIMIT",
+  "BASESCAN_V1_DEPRECATED",
+  "BASESCAN_NOTOK"
+]);
+
 export async function POST(request: Request) {
   try {
     const payloadRaw = await request.json();
@@ -86,7 +94,7 @@ export async function POST(request: Request) {
           ? await sourceBundleFromPaste({ code: payload.code!, chainId: payload.chainId })
           : await sourceBundleFromAddress({ address: payload.address!, chainId: payload.chainId });
     } catch (error) {
-      if (error instanceof ApiError && error.code === "SOURCE_UNVERIFIED") {
+      if (error instanceof ApiError && NON_FATAL_SOURCE_ERROR_CODES.has(error.code)) {
         failCode = error.code;
       } else {
         throw error;

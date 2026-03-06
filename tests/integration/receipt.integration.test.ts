@@ -1,14 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { PrismaClient } from "@prisma/client";
+import type { Address } from "viem";
 
 import {
+  authenticateWallet,
   createPasteAnalysisAndWait,
   createSession,
   prismaForTests,
   readMintedEventFromTx,
-  sendPreparedReceiptMint,
-  uniqueCodeSnippet
+  sendSignedPreparedReceiptMint,
+  uniqueCodeSnippet,
+  type PreparedMintPayload
 } from "./setup/helpers";
 
 describe("API integration - receipt prepare/confirm", () => {
@@ -22,43 +25,22 @@ describe("API integration - receipt prepare/confirm", () => {
     await prisma.$disconnect();
   });
 
-  it("prepare returns deterministic tx payload and confirm is idempotent", async () => {
+  it("prepare returns typed data and confirm verifies owner signature with idempotent persistence", async () => {
     const session = createSession({ ip: "198.51.100.40" });
     const created = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("ReceiptFlow"));
-
-    const reportBefore = await session.getJson<{
-      reportHash: string;
-      error?: { code: string; message: string };
-    }>(
-      `/api/v1/report/${created.reportId}${
-        created.privateToken ? `?token=${encodeURIComponent(created.privateToken)}` : ""
-      }`
-    );
-
-    expect(reportBefore.status).toBe(200);
+    const auth = await authenticateWallet(session);
 
     const prepare1 = await session.postJson<{
       existing?: boolean;
-      tx?: {
-        to: `0x${string}`;
-        data: `0x${string}`;
-        chainId: number;
-        args: {
-          reportHash: `0x${string}`;
-          contractAddress: `0x${string}`;
-          analyzerVersionHash: `0x${string}`;
-        };
-      };
+      typedData?: PreparedMintPayload["typedData"];
+      call?: PreparedMintPayload["call"];
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${created.reportId}/prepare`, {});
 
     const prepare2 = await session.postJson<{
       existing?: boolean;
-      tx?: {
-        to: `0x${string}`;
-        data: `0x${string}`;
-        chainId: number;
-      };
+      typedData?: PreparedMintPayload["typedData"];
+      call?: PreparedMintPayload["call"];
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${created.reportId}/prepare`, {});
 
@@ -66,16 +48,20 @@ describe("API integration - receipt prepare/confirm", () => {
     expect(prepare2.status).toBe(200);
     expect(prepare1.body.existing).toBe(false);
     expect(prepare2.body.existing).toBe(false);
-    expect(prepare1.body.tx?.to).toBe(prepare2.body.tx?.to);
-    expect(prepare1.body.tx?.data).toBe(prepare2.body.tx?.data);
 
-    const tx = prepare1.body.tx;
-    expect(tx).toBeTruthy();
+    const prepared = {
+      typedData: prepare1.body.typedData!,
+      call: prepare1.body.call!
+    };
 
-    const txHash = await sendPreparedReceiptMint({
-      to: tx!.to,
-      data: tx!.data,
-      chainId: tx!.chainId
+    expect(prepared.call.functionName).toBe("mintWithSig");
+    expect(prepared.typedData.domain.verifyingContract.toLowerCase()).toBe(prepared.call.to.toLowerCase());
+    expect(prepared.typedData.message.owner.toLowerCase()).toBe(auth.walletAddress.toLowerCase());
+    expect(prepared.typedData.message.reportHash.toLowerCase()).toBe(prepared.call.args.reportHash.toLowerCase());
+
+    const { txHash, signature } = await sendSignedPreparedReceiptMint({
+      prepared,
+      ownerPrivateKey: auth.privateKey
     });
 
     const event = await readMintedEventFromTx(txHash);
@@ -86,10 +72,16 @@ describe("API integration - receipt prepare/confirm", () => {
       receipt?: {
         txHash: string;
         reportHash: string;
+        receiptOwner: string;
+        receiptMinter: string;
       };
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${created.reportId}/confirm`, {
-      txHash
+      txHash,
+      owner: prepared.call.args.owner,
+      nonce: prepared.call.args.nonce,
+      deadline: prepared.call.args.deadline,
+      signature
     });
 
     expect(confirm1.status).toBe(200);
@@ -103,7 +95,11 @@ describe("API integration - receipt prepare/confirm", () => {
       };
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${created.reportId}/confirm`, {
-      txHash
+      txHash,
+      owner: prepared.call.args.owner,
+      nonce: prepared.call.args.nonce,
+      deadline: prepared.call.args.deadline,
+      signature
     });
 
     expect(confirm2.status).toBe(200);
@@ -115,6 +111,8 @@ describe("API integration - receipt prepare/confirm", () => {
       receipt: {
         txHash: string;
         reportHash: string;
+        receiptOwner: string;
+        receiptMinter: string;
       } | null;
       error?: { code: string; message: string };
     }>(
@@ -133,31 +131,37 @@ describe("API integration - receipt prepare/confirm", () => {
         reportId: created.reportId
       }
     });
+
     expect(dbReceipt?.reportHash.toLowerCase()).toBe(event?.reportHash.toLowerCase());
+    expect(dbReceipt?.receiptOwner?.toLowerCase()).toBe((event?.owner as Address)?.toLowerCase());
+    expect(dbReceipt?.receiptMinter?.toLowerCase()).toBe((event?.minter as Address)?.toLowerCase());
   });
 
   it("confirm rejects tx hash that belongs to a different report hash", async () => {
     const session = createSession({ ip: "198.51.100.41" });
+    const auth = await authenticateWallet(session);
 
     const reportA = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("ReceiptA"));
     const reportB = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("ReceiptB"));
 
     const prepareA = await session.postJson<{
-      tx?: {
-        to: `0x${string}`;
-        data: `0x${string}`;
-        chainId: number;
-      };
+      typedData?: PreparedMintPayload["typedData"];
+      call?: PreparedMintPayload["call"];
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${reportA.reportId}/prepare`, {});
 
     expect(prepareA.status).toBe(200);
-    expect(prepareA.body.tx).toBeTruthy();
+    expect(prepareA.body.call).toBeTruthy();
+    expect(prepareA.body.typedData).toBeTruthy();
 
-    const txHash = await sendPreparedReceiptMint({
-      to: prepareA.body.tx!.to,
-      data: prepareA.body.tx!.data,
-      chainId: prepareA.body.tx!.chainId
+    const preparedA = {
+      typedData: prepareA.body.typedData!,
+      call: prepareA.body.call!
+    };
+
+    const { txHash, signature } = await sendSignedPreparedReceiptMint({
+      prepared: preparedA,
+      ownerPrivateKey: auth.privateKey
     });
 
     const confirmA = await session.postJson<{
@@ -165,7 +169,11 @@ describe("API integration - receipt prepare/confirm", () => {
       receipt?: { txHash: string };
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${reportA.reportId}/confirm`, {
-      txHash
+      txHash,
+      owner: preparedA.call.args.owner,
+      nonce: preparedA.call.args.nonce,
+      deadline: preparedA.call.args.deadline,
+      signature
     });
 
     expect(confirmA.status).toBe(200);
@@ -173,21 +181,30 @@ describe("API integration - receipt prepare/confirm", () => {
     const mismatch = await session.postJson<{
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${reportB.reportId}/confirm`, {
-      txHash
+      txHash,
+      owner: preparedA.call.args.owner,
+      nonce: preparedA.call.args.nonce,
+      deadline: preparedA.call.args.deadline,
+      signature
     });
 
     expect(mismatch.status).toBe(400);
     expect(mismatch.body.error?.code).toBe("HASH_MISMATCH");
   });
 
-  it("confirm validates txHash shape", async () => {
+  it("confirm validates payload shape", async () => {
     const session = createSession({ ip: "198.51.100.42" });
+    const auth = await authenticateWallet(session);
     const created = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("ReceiptBadHash"));
 
     const invalid = await session.postJson<{
       error?: { code: string; message: string };
     }>(`/api/v1/receipt/${created.reportId}/confirm`, {
-      txHash: "not-a-hash"
+      txHash: "not-a-hash",
+      owner: auth.walletAddress,
+      nonce: "0",
+      deadline: "1",
+      signature: "0x1234"
     });
 
     expect(invalid.status).toBe(400);

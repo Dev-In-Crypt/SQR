@@ -47,7 +47,8 @@ Use this template:
 ### Current accepted findings
 | Detector | Link | Reason accepted | Contract-specific safety rationale |
 | --- | --- | --- | --- |
-| `timestamp` | https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp | `block.timestamp` is used only for receipt metadata/event observability. | Timestamp does not gate minting, authorization, value transfer, or critical branch logic in `ReceiptRegistry`. |
+| `timestamp` | https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp | `block.timestamp` is used for authorization expiry (`deadline`) and receipt metadata. | Timestamp influences only expiry tolerance; it does not control value transfer or external calls, and users can refresh expired signatures. |
+| `assembly` | https://github.com/crytic/slither/wiki/Detector-Documentation#assembly-usage | Minimal assembly is used in `_recoverSigner` to decode `(r,s,v)` from calldata efficiently. | Assembly scope is tightly bounded to signature parsing with explicit length, malleability (`s`), and `v` checks before `ecrecover`. |
 
 ## ReceiptRegistry detector checklist
 Review these categories on every security pass:
@@ -77,3 +78,4 @@ Review these categories on every security pass:
 4. Run `forge build` to validate remappings/dependencies.
 5. Re-run `npm run security:slither`.
 6. If failure persists, inspect compilation stderr and fix project configuration first (do not bypass with broad suppression).
+

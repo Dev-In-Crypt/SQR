@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -28,7 +28,8 @@
     "security:slither": "slither . --config-file slither.config.json --json-types detectors",
     "security:slither:ci": "slither . --config-file slither.config.json --json-types detectors",
     "security:slither:triage": "slither . --config-file slither.config.json --json-types detectors --triage-mode",
-    "check:db": "tsx scripts/check-db.ts"
+    "check:db": "tsx scripts/check-db.ts",
+    "test:unit:cov": "vitest run --config vitest.config.ts --coverage"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
@@ -48,6 +49,9 @@
     "prisma": "^6.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^15.0.0"
   }
 }

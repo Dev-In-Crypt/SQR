@@ -1,10 +1,12 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { encodeFunctionData, type Address, type Hex } from "viem";
 
 import WalletButton from "@/app/components/WalletButton";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
+import { receiptRegistryAbi } from "@/lib/receipt-shared";
 
 type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
@@ -43,7 +45,51 @@ interface ReportApiResponse {
     chainId: number;
     receiptId: string;
     mintedAt: string;
+    contractAddress: string;
+    mintedBy: string;
+    receiptOwner: string;
+    receiptMinter: string;
   } | null;
+}
+
+interface PreparedReceiptResponse {
+  existing?: boolean;
+  receipt?: ReportApiResponse["receipt"];
+  typedData?: {
+    domain: {
+      name: string;
+      version: string;
+      chainId: number;
+      verifyingContract: Address;
+    };
+    primaryType: "MintAuthorization";
+    types: {
+      EIP712Domain: Array<{ name: string; type: string }>;
+      MintAuthorization: Array<{ name: string; type: string }>;
+    };
+    message: {
+      reportHash: Hex;
+      contractAddress: Address;
+      analyzerVersionHash: Hex;
+      owner: Address;
+      nonce: string;
+      deadline: string;
+    };
+  };
+  call?: {
+    to: Address;
+    chainId: number;
+    functionName: "mintWithSig";
+    args: {
+      reportHash: Hex;
+      contractAddress: Address;
+      analyzerVersionHash: Hex;
+      owner: Address;
+      nonce: string;
+      deadline: string;
+    };
+  };
+  error?: { message?: string };
 }
 
 export default function ReportClient({ reportId, token }: { reportId: string; token: string | null }) {
@@ -52,7 +98,14 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
-  const [mintPayload, setMintPayload] = useState<{ to: string; data: string; chainId: number } | null>(null);
+  const [mintPayload, setMintPayload] = useState<{
+    to: Address;
+    data: Hex;
+    chainId: number;
+    owner: Address;
+    nonce: string;
+    deadline: string;
+  } | null>(null);
 
   async function loadReport() {
     setError(null);
@@ -138,51 +191,112 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     }
   }
 
+  async function fetchPreparedMint(): Promise<PreparedReceiptResponse> {
+    const prepResp = await fetch(`/api/v1/receipt/${reportId}/prepare`, { method: "POST" });
+    const prepJson = (await prepResp.json()) as PreparedReceiptResponse;
+
+    if (!prepResp.ok) {
+      throw new Error(prepJson.error?.message || "Could not prepare receipt mint");
+    }
+
+    return prepJson;
+  }
+
+  async function ensureWalletChain(chainId: number) {
+    if (!window.ethereum) {
+      throw new Error("No injected wallet found. Use returned payload to mint manually.");
+    }
+
+    const current = (await window.ethereum.request({ method: "eth_chainId" })) as string;
+    const currentChain = Number.parseInt(current, 16);
+    if (currentChain === chainId) {
+      return;
+    }
+
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: `0x${chainId.toString(16)}` }]
+    });
+  }
+
   async function mintReceipt() {
     setBusy(true);
     setError(null);
 
     try {
-      const prepResp = await fetch(`/api/v1/receipt/${reportId}/prepare`, { method: "POST" });
-      const prepJson = (await prepResp.json()) as {
-        existing?: boolean;
-        receipt?: ReportApiResponse["receipt"];
-        tx?: { to: string; data: string; chainId: number };
-        error?: { message?: string };
-      };
+      let prepared = await fetchPreparedMint();
 
-      if (!prepResp.ok) {
-        throw new Error(prepJson.error?.message || "Could not prepare receipt mint");
-      }
-
-      if (prepJson.existing) {
+      if (prepared.existing) {
         await loadReport();
         return;
       }
 
-      if (!prepJson.tx) {
-        throw new Error("No transaction payload returned");
+      if (!prepared.call || !prepared.typedData) {
+        throw new Error("Prepare response missing typedData/call payload");
       }
-
-      setMintPayload(prepJson.tx);
 
       if (!window.ethereum) {
         throw new Error("No injected wallet found. Use returned payload to mint manually.");
       }
 
       const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const from = accounts?.[0];
+      const from = accounts?.[0] as Address | undefined;
       if (!from) {
         throw new Error("No wallet account available");
       }
+
+      if (from.toLowerCase() !== prepared.call.args.owner.toLowerCase()) {
+        throw new Error("Connected wallet does not match prepared owner");
+      }
+
+      if (BigInt(prepared.call.args.deadline) <= BigInt(Math.floor(Date.now() / 1000))) {
+        prepared = await fetchPreparedMint();
+        if (prepared.existing) {
+          await loadReport();
+          return;
+        }
+        if (!prepared.call || !prepared.typedData) {
+          throw new Error("Fresh prepare response missing typedData/call payload");
+        }
+      }
+
+      await ensureWalletChain(prepared.call.chainId);
+
+      const signature = (await window.ethereum.request({
+        method: "eth_signTypedData_v4",
+        params: [from, JSON.stringify(prepared.typedData)]
+      })) as Hex;
+
+      const data = encodeFunctionData({
+        abi: receiptRegistryAbi,
+        functionName: "mintWithSig",
+        args: [
+          prepared.call.args.reportHash,
+          prepared.call.args.contractAddress,
+          prepared.call.args.analyzerVersionHash,
+          prepared.call.args.owner,
+          BigInt(prepared.call.args.nonce),
+          BigInt(prepared.call.args.deadline),
+          signature
+        ]
+      });
+
+      setMintPayload({
+        to: prepared.call.to,
+        data,
+        chainId: prepared.call.chainId,
+        owner: prepared.call.args.owner,
+        nonce: prepared.call.args.nonce,
+        deadline: prepared.call.args.deadline
+      });
 
       const txHash = (await window.ethereum.request({
         method: "eth_sendTransaction",
         params: [
           {
             from,
-            to: prepJson.tx.to,
-            data: prepJson.tx.data
+            to: prepared.call.to,
+            data
           }
         ]
       })) as string;
@@ -192,7 +306,13 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ txHash })
+        body: JSON.stringify({
+          txHash,
+          owner: prepared.call.args.owner,
+          nonce: prepared.call.args.nonce,
+          deadline: prepared.call.args.deadline,
+          signature
+        })
       });
 
       const confirmJson = (await confirmResp.json()) as {
@@ -205,7 +325,29 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       await loadReport();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      const message = actionError instanceof Error ? actionError.message : String(actionError);
+
+      if (message.toLowerCase().includes("expired")) {
+        try {
+          const refreshed = await fetchPreparedMint();
+          if (!refreshed.existing && refreshed.call && refreshed.typedData) {
+            setMintPayload({
+              to: refreshed.call.to,
+              data: "0x",
+              chainId: refreshed.call.chainId,
+              owner: refreshed.call.args.owner,
+              nonce: refreshed.call.args.nonce,
+              deadline: refreshed.call.args.deadline
+            });
+            setError("Authorization expired. Fresh typed data prepared, please mint again.");
+            return;
+          }
+        } catch {
+          // Keep original error.
+        }
+      }
+
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -299,6 +441,8 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
               <div>txHash: {data.receipt.txHash}</div>
               <div>receiptId: {data.receipt.receiptId}</div>
+              <div>owner: {data.receipt.receiptOwner}</div>
+              <div>minter: {data.receipt.receiptMinter}</div>
               <Link href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
                 Open receipt details
               </Link>
@@ -339,7 +483,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             ))}
           </div>
 
-                    {(data.report.warnings.length > 0 || data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0) ? (
+          {data.report.warnings.length > 0 || data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0 ? (
             <div className="card stack">
               <h3 style={{ margin: 0 }}>Analysis Notes</h3>
               {data.report.warnings.map((item, idx) => (
@@ -366,6 +510,3 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     </div>
   );
 }
-
-
-

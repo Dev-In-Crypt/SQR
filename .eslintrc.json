@@ -1,0 +1,29 @@
+{
+  "root": true,
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "ignorePatterns": [
+    ".next/**",
+    ".next-test/**",
+    "coverage/**",
+    "contracts/out/**",
+    "output/**",
+    "node_modules/**",
+    "dist/**",
+    "cache/**",
+    "next-env.d.ts"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "scripts/**/*.ts",
+        "tests/**/*.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
+  ]
+}
