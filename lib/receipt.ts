@@ -1,4 +1,5 @@
 import {
+  TransactionReceiptNotFoundError,
   createPublicClient,
   decodeEventLog,
   defineChain,
@@ -10,6 +11,13 @@ import {
   zeroAddress
 } from "viem";
 
+import {
+  explorerBaseUrlForChainId,
+  receiptNetworkByChainId,
+  requiredReceiptChainId,
+  requiredReceiptNetwork,
+  requiredReceiptRpcUrl
+} from "@/lib/base-network";
 import { config } from "@/lib/config";
 import { ApiError } from "@/lib/errors";
 import { hashCanonical } from "@/lib/hash";
@@ -37,29 +45,45 @@ function configuredReceiptContract(): Address {
   return value;
 }
 
-function configuredRpcUrl(): string {
-  if (!config.BASE_RPC_URL) {
-    throw new ApiError(503, "RECEIPT_RPC_UNAVAILABLE", "Base RPC URL is not configured");
-  }
+function requiredChainContext() {
+  const network = requiredReceiptNetwork();
 
-  return config.BASE_RPC_URL;
+  return {
+    chainId: network.chainId,
+    rpcUrl: network.rpcUrl,
+    chain: defineChain({
+      id: network.chainId,
+      name: network.chainName,
+      nativeCurrency: {
+        name: "Ether",
+        symbol: "ETH",
+        decimals: 18
+      },
+      rpcUrls: {
+        default: {
+          http: [network.rpcUrl]
+        }
+      }
+    })
+  };
 }
 
-function chainForRpc() {
-  return defineChain({
-    id: config.BASE_CHAIN_ID,
-    name: "Base",
-    nativeCurrency: {
-      name: "Ether",
-      symbol: "ETH",
-      decimals: 18
-    },
-    rpcUrls: {
-      default: {
-        http: [config.BASE_RPC_URL || ""]
-      }
-    }
+function requiredChainClient() {
+  const context = requiredChainContext();
+
+  return createPublicClient({
+    chain: context.chain,
+    transport: http(context.rpcUrl)
   });
+}
+
+function isReceiptNotFoundError(error: unknown): boolean {
+  if (error instanceof TransactionReceiptNotFoundError) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("transaction receipt") && message.includes("could not be found");
 }
 
 export function analyzerVersionHash(): Hex {
@@ -71,13 +95,8 @@ export async function readOwnerMintNonce(owner: string): Promise<bigint> {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
   }
 
-  const rpcUrl = configuredRpcUrl();
   const receiptContract = configuredReceiptContract();
-
-  const client = createPublicClient({
-    chain: chainForRpc(),
-    transport: http(rpcUrl)
-  });
+  const client = requiredChainClient();
 
   return client.readContract({
     address: receiptContract,
@@ -117,6 +136,7 @@ export async function prepareMintAuthorization(params: {
   const owner = params.owner as Address;
   const nonce = await readOwnerMintNonce(owner);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + (params.ttlSeconds ?? 600));
+  const chainId = requiredReceiptChainId();
 
   const message: MintAuthorizationMessage = {
     reportHash: params.reportHash as Hex,
@@ -128,7 +148,7 @@ export async function prepareMintAuthorization(params: {
   };
 
   const typedData = buildMintAuthorizationRpcTypedData({
-    chainId: config.BASE_CHAIN_ID,
+    chainId,
     verifyingContract: receiptContract,
     message
   });
@@ -137,7 +157,7 @@ export async function prepareMintAuthorization(params: {
     typedData,
     call: {
       to: receiptContract,
-      chainId: config.BASE_CHAIN_ID,
+      chainId,
       functionName: "mintWithSig",
       args: {
         reportHash: message.reportHash,
@@ -170,11 +190,11 @@ export async function recoverMintAuthorizationSigner(params: {
   }
 
   const typedData = buildMintAuthorizationTypedData({
-    chainId: config.BASE_CHAIN_ID,
+    chainId: requiredReceiptChainId(),
     verifyingContract: receiptContract,
     message: {
       reportHash: params.reportHash as Hex,
-      contractAddress: ((params.contractAddress || zeroAddress) as Address),
+      contractAddress: (params.contractAddress || zeroAddress) as Address,
       analyzerVersionHash: analyzerVersionHash(),
       owner: params.owner as Address,
       nonce: BigInt(params.nonce),
@@ -191,6 +211,21 @@ export async function recoverMintAuthorizationSigner(params: {
   });
 }
 
+export async function hasTransactionReceiptOnRequiredChain(txHash: string): Promise<boolean> {
+  const client = requiredChainClient();
+
+  try {
+    await client.getTransactionReceipt({ hash: txHash as Hex });
+    return true;
+  } catch (error) {
+    if (isReceiptNotFoundError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
 export async function readMintedEventFromTx(txHash: string): Promise<{
   reportHash: string;
   contractAddress: string;
@@ -199,17 +234,19 @@ export async function readMintedEventFromTx(txHash: string): Promise<{
   timestamp: Date;
   receiptId: string;
 } | null> {
-  if (!config.BASE_RPC_URL || !config.RECEIPT_CONTRACT_ADDRESS) {
-    return null;
+  const client = requiredChainClient();
+  const expectedContract = configuredReceiptContract().toLowerCase();
+
+  let txReceipt;
+  try {
+    txReceipt = await client.getTransactionReceipt({ hash: txHash as Hex });
+  } catch (error) {
+    if (isReceiptNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
   }
-
-  const client = createPublicClient({
-    chain: chainForRpc(),
-    transport: http(config.BASE_RPC_URL)
-  });
-
-  const txReceipt = await client.getTransactionReceipt({ hash: txHash as Hex });
-  const expectedContract = config.RECEIPT_CONTRACT_ADDRESS.toLowerCase();
 
   for (const log of txReceipt.logs) {
     if (log.address.toLowerCase() !== expectedContract) {
@@ -244,9 +281,10 @@ export async function readMintedEventFromTx(txHash: string): Promise<{
 }
 
 export function explorerTxUrl(txHash: string, chainId: number): string {
-  if (chainId === config.STAGING_BASE_CHAIN_ID) {
-    return `https://sepolia.basescan.org/tx/${txHash}`;
-  }
+  const network = receiptNetworkByChainId(chainId);
+  return `${explorerBaseUrlForChainId(network.chainId)}/tx/${txHash}`;
+}
 
-  return `https://basescan.org/tx/${txHash}`;
+export function requiredReceiptChainRpcUrl(): string {
+  return requiredReceiptRpcUrl();
 }

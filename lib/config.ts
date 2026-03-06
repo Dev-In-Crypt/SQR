@@ -8,6 +8,8 @@ const envSchema = z.object({
   BASE_CHAIN_ID: z.coerce.number().default(8453),
   STAGING_BASE_CHAIN_ID: z.coerce.number().default(84532),
   BASE_RPC_URL: z.string().optional(),
+  BASE_MAINNET_RPC_URL: z.string().optional(),
+  BASE_SEPOLIA_RPC_URL: z.string().optional(),
   BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
   SOURCIFY_API_URL: z
@@ -46,4 +48,3 @@ export const config = {
   isProd: env.NODE_ENV === "production",
   slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
 };
-

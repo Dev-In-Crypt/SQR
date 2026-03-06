@@ -61,6 +61,7 @@ If Redis is not configured, analysis jobs are processed inline by the API proces
 - `POST /api/v1/report/{reportId}/visibility`
 - `POST /api/v1/report/{reportId}/share-token`
 - `GET /api/v1/history`
+- `GET /api/v1/config`
 - `POST /api/v1/receipt/{reportId}/prepare`
 - `POST /api/v1/receipt/{reportId}/confirm`
 - `POST /api/v1/auth/nonce`
@@ -183,7 +184,9 @@ npm run test:all
 - `APP_ENV=local`
 - `DATABASE_URL`
 - `REDIS_URL` (optional)
-- `BASE_RPC_URL` (required for receipt prepare/confirm nonce/event reads)
+- `BASE_RPC_URL` (fallback RPC for receipt prepare/confirm)
+- `BASE_MAINNET_RPC_URL` (preferred Base mainnet RPC for receipt reads and wallet add/switch)
+- `BASE_SEPOLIA_RPC_URL` (preferred Base Sepolia RPC for receipt reads and wallet add/switch)
 - `RECEIPT_CONTRACT_ADDRESS` (required for receipt prepare/confirm)
 - `SOLC_PATH` (optional absolute path to `solc`/`solc.exe` used by snippet standalone Slither scans)
 - `OPENAI_API_KEY` (optional; if empty, app uses local summary fallback)
@@ -334,5 +337,9 @@ npm run security:slither:triage
 - Private link token is stored hashed in DB (`privateTokenHash`).
 - Production address analysis enforces Base mainnet chainId 8453.
 - Receipt owner semantics are signature-bound in v0.2.0; pre-v0.2.0 registries should be treated as deprecated for ownership claims.
+
+
+
+
 
 

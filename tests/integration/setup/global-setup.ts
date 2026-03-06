@@ -204,6 +204,8 @@ export default async function integrationGlobalSetup() {
       BASE_CHAIN_ID: "8453",
       STAGING_BASE_CHAIN_ID: "84532",
       BASE_RPC_URL: rpcUrl,
+      BASE_MAINNET_RPC_URL: rpcUrl,
+      BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: receiptContractAddress,
       ENABLE_SLITHER: "true",
       OPENAI_API_KEY: "",
@@ -253,4 +255,6 @@ export default async function integrationGlobalSetup() {
     throw error;
   }
 }
+
+
 

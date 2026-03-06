@@ -207,6 +207,8 @@ async function main() {
       BASE_CHAIN_ID: "8453",
       STAGING_BASE_CHAIN_ID: "84532",
       BASE_RPC_URL: rpcUrl,
+      BASE_MAINNET_RPC_URL: rpcUrl,
+      BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: deployReceipt.contractAddress,
       ENABLE_SLITHER: "true",
       OPENAI_API_KEY: "",
@@ -246,4 +248,6 @@ main().catch(async (error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+
 

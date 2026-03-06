@@ -5,8 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 
 import WalletButton from "@/app/components/WalletButton";
+import { providerErrorCode } from "@/lib/eip1193";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { receiptRegistryAbi } from "@/lib/receipt-shared";
+import { EnsureChainError, ensureChain, readWalletChainHex } from "@/lib/wallet-chain";
 
 type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
 
@@ -92,12 +94,51 @@ interface PreparedReceiptResponse {
   error?: { message?: string };
 }
 
+interface RuntimeConfigResponse {
+  receipt: {
+    requiredChainId: number;
+    requiredChainHex: `0x${string}`;
+    requiredNetworkName: string;
+    requiredNetworkLabel: string;
+    addEthereumChain: {
+      chainId: `0x${string}`;
+      chainName: string;
+      nativeCurrency: {
+        name: "Ether";
+        symbol: "ETH";
+        decimals: 18;
+      };
+      rpcUrls: string[];
+      blockExplorerUrls: string[];
+    };
+  };
+}
+
+function chainHexToNumber(chainHex: string): number {
+  return Number.parseInt(chainHex, 16);
+}
+
+function formatWalletChain(chainHex: string | null): string {
+  if (!chainHex) {
+    return "unavailable";
+  }
+
+  const chainId = chainHexToNumber(chainHex);
+  if (Number.isNaN(chainId)) {
+    return chainHex;
+  }
+
+  return `${chainHex} / ${chainId}`;
+}
+
 export default function ReportClient({ reportId, token }: { reportId: string; token: string | null }) {
   const [data, setData] = useState<ReportApiResponse | null>(null);
   const [severityFilter, setSeverityFilter] = useState<"ALL" | Severity>("ALL");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [walletChainHex, setWalletChainHex] = useState<string | null>(null);
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfigResponse["receipt"] | null>(null);
   const [mintPayload, setMintPayload] = useState<{
     to: Address;
     data: Hex;
@@ -124,12 +165,77 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     setData(json as ReportApiResponse);
   }
 
+  async function fetchRuntimeConfig(): Promise<RuntimeConfigResponse["receipt"]> {
+    const response = await fetch("/api/v1/config", {
+      cache: "no-store"
+    });
+
+    const json = (await response.json()) as RuntimeConfigResponse | { error?: { message?: string } };
+    if (!response.ok) {
+      throw new Error((json as { error?: { message?: string } }).error?.message || "Failed to load runtime config");
+    }
+
+    const receiptConfig = (json as RuntimeConfigResponse).receipt;
+    setRuntimeConfig(receiptConfig);
+    return receiptConfig;
+  }
+
   useEffect(() => {
     void loadReport().catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportId, token]);
+
+  useEffect(() => {
+    void fetchRuntimeConfig().catch(() => {
+      // Runtime config errors are surfaced when mint action starts.
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!window.ethereum) {
+      setWalletChainHex(null);
+      return;
+    }
+
+    let mounted = true;
+
+    const syncWalletChain = async () => {
+      if (!window.ethereum || !mounted) {
+        return;
+      }
+
+      try {
+        const chainHex = await readWalletChainHex(window.ethereum);
+        if (mounted) {
+          setWalletChainHex(chainHex);
+        }
+      } catch {
+        if (mounted) {
+          setWalletChainHex(null);
+        }
+      }
+    };
+
+    const onChainChanged = (nextChainId: unknown) => {
+      if (typeof nextChainId === "string") {
+        setWalletChainHex(nextChainId.toLowerCase());
+        return;
+      }
+
+      void syncWalletChain();
+    };
+
+    void syncWalletChain();
+    window.ethereum.on?.("chainChanged", onChainChanged);
+
+    return () => {
+      mounted = false;
+      window.ethereum?.removeListener?.("chainChanged", onChainChanged);
+    };
+  }, []);
 
   const findings = useMemo(() => {
     if (!data) {
@@ -202,21 +308,25 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     return prepJson;
   }
 
-  async function ensureWalletChain(chainId: number) {
-    if (!window.ethereum) {
-      throw new Error("No injected wallet found. Use returned payload to mint manually.");
+  function ensurePreparedChainMatchesRequired(
+    prepared: PreparedReceiptResponse,
+    required: RuntimeConfigResponse["receipt"]
+  ) {
+    if (!prepared.call || !prepared.typedData) {
+      throw new Error("Prepare response missing typedData/call payload");
     }
 
-    const current = (await window.ethereum.request({ method: "eth_chainId" })) as string;
-    const currentChain = Number.parseInt(current, 16);
-    if (currentChain === chainId) {
-      return;
+    if (prepared.call.chainId !== required.requiredChainId) {
+      throw new Error(
+        `Prepare chain mismatch: required ${required.requiredChainId}, received ${prepared.call.chainId}`
+      );
     }
 
-    await window.ethereum.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: `0x${chainId.toString(16)}` }]
-    });
+    if (prepared.typedData.domain.chainId !== required.requiredChainId) {
+      throw new Error(
+        `Typed data chain mismatch: required ${required.requiredChainId}, received ${prepared.typedData.domain.chainId}`
+      );
+    }
   }
 
   async function mintReceipt() {
@@ -224,6 +334,32 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     setError(null);
 
     try {
+      if (!window.ethereum) {
+        throw new Error("No injected wallet found. Use returned payload to mint manually.");
+      }
+
+      const provider = window.ethereum;
+      const required = await fetchRuntimeConfig();
+
+      const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+      const from = accounts?.[0] as Address | undefined;
+      if (!from) {
+        throw new Error("No wallet account available");
+      }
+
+      const ensureRequiredChain = async () => {
+        const ensured = await ensureChain({
+          provider,
+          requiredChainId: required.requiredChainId,
+          requiredNetworkLabel: required.requiredNetworkLabel,
+          addEthereumChain: required.addEthereumChain
+        });
+
+        setWalletChainHex(ensured.chainHex);
+      };
+
+      await ensureRequiredChain();
+
       let prepared = await fetchPreparedMint();
 
       if (prepared.existing) {
@@ -231,38 +367,25 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         return;
       }
 
-      if (!prepared.call || !prepared.typedData) {
-        throw new Error("Prepare response missing typedData/call payload");
-      }
+      ensurePreparedChainMatchesRequired(prepared, required);
 
-      if (!window.ethereum) {
-        throw new Error("No injected wallet found. Use returned payload to mint manually.");
-      }
-
-      const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const from = accounts?.[0] as Address | undefined;
-      if (!from) {
-        throw new Error("No wallet account available");
-      }
-
-      if (from.toLowerCase() !== prepared.call.args.owner.toLowerCase()) {
+      if (from.toLowerCase() !== prepared.call!.args.owner.toLowerCase()) {
         throw new Error("Connected wallet does not match prepared owner");
       }
 
-      if (BigInt(prepared.call.args.deadline) <= BigInt(Math.floor(Date.now() / 1000))) {
+      if (BigInt(prepared.call!.args.deadline) <= BigInt(Math.floor(Date.now() / 1000))) {
         prepared = await fetchPreparedMint();
         if (prepared.existing) {
           await loadReport();
           return;
         }
-        if (!prepared.call || !prepared.typedData) {
-          throw new Error("Fresh prepare response missing typedData/call payload");
-        }
+
+        ensurePreparedChainMatchesRequired(prepared, required);
       }
 
-      await ensureWalletChain(prepared.call.chainId);
+      await ensureRequiredChain();
 
-      const signature = (await window.ethereum.request({
+      const signature = (await provider.request({
         method: "eth_signTypedData_v4",
         params: [from, JSON.stringify(prepared.typedData)]
       })) as Hex;
@@ -271,31 +394,33 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         abi: receiptRegistryAbi,
         functionName: "mintWithSig",
         args: [
-          prepared.call.args.reportHash,
-          prepared.call.args.contractAddress,
-          prepared.call.args.analyzerVersionHash,
-          prepared.call.args.owner,
-          BigInt(prepared.call.args.nonce),
-          BigInt(prepared.call.args.deadline),
+          prepared.call!.args.reportHash,
+          prepared.call!.args.contractAddress,
+          prepared.call!.args.analyzerVersionHash,
+          prepared.call!.args.owner,
+          BigInt(prepared.call!.args.nonce),
+          BigInt(prepared.call!.args.deadline),
           signature
         ]
       });
 
       setMintPayload({
-        to: prepared.call.to,
+        to: prepared.call!.to,
         data,
-        chainId: prepared.call.chainId,
-        owner: prepared.call.args.owner,
-        nonce: prepared.call.args.nonce,
-        deadline: prepared.call.args.deadline
+        chainId: prepared.call!.chainId,
+        owner: prepared.call!.args.owner,
+        nonce: prepared.call!.args.nonce,
+        deadline: prepared.call!.args.deadline
       });
 
-      const txHash = (await window.ethereum.request({
+      await ensureRequiredChain();
+
+      const txHash = (await provider.request({
         method: "eth_sendTransaction",
         params: [
           {
             from,
-            to: prepared.call.to,
+            to: prepared.call!.to,
             data
           }
         ]
@@ -308,9 +433,9 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         },
         body: JSON.stringify({
           txHash,
-          owner: prepared.call.args.owner,
-          nonce: prepared.call.args.nonce,
-          deadline: prepared.call.args.deadline,
+          owner: prepared.call!.args.owner,
+          nonce: prepared.call!.args.nonce,
+          deadline: prepared.call!.args.deadline,
           signature
         })
       });
@@ -325,6 +450,18 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       await loadReport();
     } catch (actionError) {
+      if (actionError instanceof EnsureChainError) {
+        setError(actionError.message);
+        return;
+      }
+
+      const providerCode = providerErrorCode(actionError);
+      if (providerCode === 4001) {
+        const networkLabel = runtimeConfig?.requiredNetworkLabel || "the required Base network";
+        setError(`Mint requires ${networkLabel}. Wallet request was rejected.`);
+        return;
+      }
+
       const message = actionError instanceof Error ? actionError.message : String(actionError);
 
       if (message.toLowerCase().includes("expired")) {
@@ -394,6 +531,10 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <div className="stack">
                 <hr className="divider" />
                 <WalletButton onSessionChange={loadReport} />
+                <div className="muted">Wallet network chainId: {formatWalletChain(walletChainHex)}</div>
+                <div className="muted">
+                  Required network: {runtimeConfig ? `${runtimeConfig.requiredNetworkLabel} (${runtimeConfig.requiredChainId})` : "loading..."}
+                </div>
                 <div className="row">
                   <button
                     className="button secondary"

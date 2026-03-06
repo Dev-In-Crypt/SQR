@@ -2,10 +2,11 @@ import { z } from "zod";
 
 import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
-import { config } from "@/lib/config";
+import { requiredReceiptChainId } from "@/lib/base-network";
 import { prisma } from "@/lib/db";
 import {
   explorerTxUrl,
+  hasTransactionReceiptOnRequiredChain,
   readMintedEventFromTx,
   recoverMintAuthorizationSigner
 } from "@/lib/receipt";
@@ -69,6 +70,11 @@ export async function POST(
       metadata?: { contractAddress?: string };
     };
 
+    const onRequiredNetwork = await hasTransactionReceiptOnRequiredChain(payload.txHash);
+    if (!onRequiredNetwork) {
+      return fail(400, "TX_NOT_FOUND_REQUIRED_NETWORK", "tx not found on required network");
+    }
+
     const eventData = await readMintedEventFromTx(payload.txHash).catch(() => null);
 
     if (!eventData) {
@@ -96,12 +102,14 @@ export async function POST(
       return fail(400, "OWNER_MISMATCH", "Transaction event owner does not match signed owner");
     }
 
+    const requiredChain = requiredReceiptChainId();
+
     const created = await prisma.receipt.create({
       data: {
         reportId: report.id,
         reportHash: report.reportHash,
         txHash: payload.txHash,
-        chainId: config.BASE_CHAIN_ID,
+        chainId: requiredChain,
         contractAddress: eventData.contractAddress,
         receiptId: eventData.receiptId,
         mintedBy: eventData.minter,
@@ -114,7 +122,7 @@ export async function POST(
     return ok({
       existing: false,
       receipt: created,
-      explorerUrl: explorerTxUrl(payload.txHash, config.BASE_CHAIN_ID)
+      explorerUrl: explorerTxUrl(payload.txHash, requiredChain)
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

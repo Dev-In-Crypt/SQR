@@ -192,6 +192,35 @@ describe("API integration - receipt prepare/confirm", () => {
     expect(mismatch.body.error?.code).toBe("HASH_MISMATCH");
   });
 
+  it("confirm rejects tx hash not found on required network", async () => {
+    const session = createSession({ ip: "198.51.100.43" });
+    const auth = await authenticateWallet(session);
+    const created = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("ReceiptWrongNetwork"));
+
+    const prepare = await session.postJson<{
+      typedData?: PreparedMintPayload["typedData"];
+      call?: PreparedMintPayload["call"];
+      error?: { code: string; message: string };
+    }>(`/api/v1/receipt/${created.reportId}/prepare`, {});
+
+    expect(prepare.status).toBe(200);
+    expect(prepare.body.call).toBeTruthy();
+
+    const notFoundTxHash = `0x${"ab".repeat(32)}`;
+    const confirm = await session.postJson<{
+      error?: { code: string; message: string };
+    }>(`/api/v1/receipt/${created.reportId}/confirm`, {
+      txHash: notFoundTxHash,
+      owner: auth.walletAddress,
+      nonce: prepare.body.call!.args.nonce,
+      deadline: prepare.body.call!.args.deadline,
+      signature: "0x12"
+    });
+
+    expect(confirm.status).toBe(400);
+    expect(confirm.body.error?.code).toBe("TX_NOT_FOUND_REQUIRED_NETWORK");
+    expect(confirm.body.error?.message).toContain("tx not found on required network");
+  });
   it("confirm validates payload shape", async () => {
     const session = createSession({ ip: "198.51.100.42" });
     const auth = await authenticateWallet(session);
@@ -211,3 +240,4 @@ describe("API integration - receipt prepare/confirm", () => {
     expect(invalid.body.error?.code).toBe("INVALID_PAYLOAD");
   });
 });
+
