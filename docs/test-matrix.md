@@ -17,4 +17,6 @@
 | Zero-address policy (code-only reports) | N/A | N/A | N/A | `contracts/test/ReceiptRegistry.t.sol` |
 | Receipt state immutability and uniqueness invariants | N/A | N/A | N/A | `contracts/test/ReceiptRegistry.invariant.t.sol` |
 | Partial/failure handling without stuck processing | N/A | `tests/integration/failure-handling.integration.test.ts` | N/A | N/A |
+| Negative matrix (paste + address deterministic error semantics) | N/A | `tests/integration/negative-matrix.integration.test.ts` | `tests/e2e/negative.matrix.spec.ts` | N/A |
+| Receipt negative guards (owner/signature/network/event mismatch) | N/A | `tests/integration/receipt-negative.integration.test.ts` | `tests/e2e/negative.matrix.spec.ts` | `contracts/test/ReceiptRegistry.negative.t.sol` |
 

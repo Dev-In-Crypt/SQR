@@ -55,6 +55,7 @@ broadcast/
 output/playwright/
 playwright-report/
 test-results/
+docs/negative-test-report.md
 
 # Slither artifacts
 slither-report.json
@@ -73,6 +74,7 @@ Thumbs.db
 *.bak
 *.swp
 *.swo
+tsconfig.e2e_*.json
 
 # Local planning markdown
 Plan.md

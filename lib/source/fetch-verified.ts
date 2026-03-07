@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import type { SourceFile } from "@/lib/types";
 import { config } from "@/lib/config";
 
@@ -30,14 +32,20 @@ interface VerifiedSourceResponse {
   reason?: string;
 }
 
+const BASESCAN_MAX_ATTEMPTS = Number(process.env.SQR_TEST_BASESCAN_MAX_ATTEMPTS || "3");
+const BASESCAN_TOTAL_TIMEOUT_MS = Number(process.env.SQR_TEST_BASESCAN_TOTAL_TIMEOUT_MS || "1500");
+const BASESCAN_BACKOFF_MS = 120;
+
+function usingSourceStub(): boolean {
+  return process.env.SQR_TEST_SOURCE_STUB === "1";
+}
+
 function extractFilesFromBaseScanSource(sourceCode: string): SourceFile[] {
   if (!sourceCode.trim()) {
     return [];
   }
 
   const trimmed = sourceCode.trim();
-
-  // Etherscan-compatible format can wrap JSON with double braces.
   const normalizedJsonCandidate =
     trimmed.startsWith("{{") && trimmed.endsWith("}}")
       ? trimmed.slice(1, -1)
@@ -53,7 +61,7 @@ function extractFilesFromBaseScanSource(sourceCode: string): SourceFile[] {
         .filter((file) => file.content.length > 0);
     }
   } catch {
-    // Not a JSON payload, keep fallback below.
+    // Not JSON, fallback to single file source.
   }
 
   return [{ path: "Contract.sol", content: sourceCode }];
@@ -72,7 +80,6 @@ function resolveBaseScanApiUrl(configuredUrl: string): string {
   try {
     const parsed = new URL(trimmed);
 
-    // BaseScan's old v1 host should route through Etherscan v2.
     if (parsed.hostname.includes("basescan.org")) {
       return "https://api.etherscan.io/v2/api";
     }
@@ -82,7 +89,7 @@ function resolveBaseScanApiUrl(configuredUrl: string): string {
       return parsed.toString();
     }
   } catch {
-    // Fall through to raw URL.
+    // keep original
   }
 
   return trimmed;
@@ -113,7 +120,81 @@ function classifyBaseScanReason(reason: string): string {
   return "BASESCAN_NOTOK";
 }
 
-async function fetchFromBaseScan(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+function shouldRetryBaseScan(reason: string | undefined): boolean {
+  if (!reason) {
+    return false;
+  }
+
+  return (
+    reason === "BASESCAN_RATE_LIMIT" ||
+    reason === "BASESCAN_TIMEOUT" ||
+    reason === "BASESCAN_MALFORMED_JSON" ||
+    reason === "BASESCAN_HTTP_429" ||
+    reason === "BASESCAN_HTTP_503"
+  );
+}
+
+function mockBaseScanResponse(chainId: number, address: string): VerifiedSourceResponse {
+  const key = address.toLowerCase();
+  const simpleVerified = [
+    "// SPDX-License-Identifier: MIT",
+    "pragma solidity ^0.8.20;",
+    "contract Verified { uint256 public x; }"
+  ].join("\n");
+
+  if (key === "0x0000000000000000000000000000000000000001") {
+    return {
+      verified: true,
+      files: [{ path: "Verified.sol", content: simpleVerified }],
+      metadata: { sourceProvider: "basescan-v2", chainId, mocked: true }
+    };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000002") {
+    return {
+      verified: true,
+      files: [{ path: "Proxy.sol", content: simpleVerified }],
+      metadata: { sourceProvider: "basescan-v2", chainId, mocked: true, proxy: true, warnings: ["PROXY_DETECTED"] }
+    };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000003") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_RATE_LIMIT" };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000004") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_TIMEOUT" };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000005") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_MALFORMED_JSON" };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000007") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_INVALID_API_KEY" };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000008") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_V1_DEPRECATED" };
+  }
+
+  if (key === "0x0000000000000000000000000000000000000009") {
+    return { verified: false, files: [], metadata: { mocked: true }, reason: "BASESCAN_NOTOK" };
+  }
+
+  return {
+    verified: false,
+    files: [],
+    metadata: { sourceProvider: "basescan-v2", mocked: true },
+    reason: "SOURCE_UNVERIFIED"
+  };
+}
+
+async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs: number): Promise<VerifiedSourceResponse> {
+  if (usingSourceStub()) {
+    return mockBaseScanResponse(chainId, address);
+  }
+
   const url = new URL(resolveBaseScanApiUrl(config.BASESCAN_API_URL));
   url.searchParams.set("module", "contract");
   url.searchParams.set("action", "getsourcecode");
@@ -124,10 +205,26 @@ async function fetchFromBaseScan(chainId: number, address: string): Promise<Veri
     url.searchParams.set("apikey", config.BASESCAN_API_KEY);
   }
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    cache: "no-store"
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(Math.max(100, timeoutMs))
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return {
+        verified: false,
+        files: [],
+        metadata: { sourceProvider: "basescan-v2", url: url.toString() },
+        reason: "BASESCAN_TIMEOUT"
+      };
+    }
+
+    throw error;
+  }
 
   if (!response.ok) {
     return {
@@ -141,7 +238,21 @@ async function fetchFromBaseScan(chainId: number, address: string): Promise<Veri
     };
   }
 
-  const payload = (await response.json()) as BaseScanPayload;
+  let payload: BaseScanPayload;
+
+  try {
+    payload = (await response.json()) as BaseScanPayload;
+  } catch {
+    return {
+      verified: false,
+      files: [],
+      metadata: {
+        sourceProvider: "basescan-v2",
+        url: url.toString()
+      },
+      reason: "BASESCAN_MALFORMED_JSON"
+    };
+  }
 
   if (payload.status !== "1" || !Array.isArray(payload.result)) {
     const reasonMessage =
@@ -185,13 +296,95 @@ async function fetchFromBaseScan(chainId: number, address: string): Promise<Veri
       compilerVersion: item.CompilerVersion,
       optimizationUsed: item.OptimizationUsed,
       runs: item.Runs,
-      licenseType: item.LicenseType
+      licenseType: item.LicenseType,
+      proxy: item.Proxy === "1"
     },
     reason: files.length > 0 ? undefined : "SOURCE_UNVERIFIED"
   };
 }
 
+async function fetchFromBaseScan(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+  const startedAt = Date.now();
+  let attempt = 0;
+  let last: VerifiedSourceResponse = {
+    verified: false,
+    files: [],
+    metadata: {},
+    reason: "SOURCE_UNVERIFIED"
+  };
+
+  while (attempt < BASESCAN_MAX_ATTEMPTS && Date.now() - startedAt < BASESCAN_TOTAL_TIMEOUT_MS) {
+    attempt += 1;
+    const remaining = BASESCAN_TOTAL_TIMEOUT_MS - (Date.now() - startedAt);
+    last = await fetchFromBaseScanOnce(chainId, address, remaining);
+
+    if (last.verified || !shouldRetryBaseScan(last.reason)) {
+      return {
+        ...last,
+        metadata: {
+          ...last.metadata,
+          basescanAttempts: attempt
+        }
+      };
+    }
+
+    if (attempt >= BASESCAN_MAX_ATTEMPTS) {
+      break;
+    }
+
+    if (Date.now() - startedAt + BASESCAN_BACKOFF_MS >= BASESCAN_TOTAL_TIMEOUT_MS) {
+      break;
+    }
+
+    await delay(BASESCAN_BACKOFF_MS);
+  }
+
+  return {
+    ...last,
+    metadata: {
+      ...last.metadata,
+      basescanAttempts: attempt,
+      basescanRetryBudgetMs: BASESCAN_TOTAL_TIMEOUT_MS
+    }
+  };
+}
+
+function mockSourcifyResponse(chainId: number, address: string): VerifiedSourceResponse {
+  const key = address.toLowerCase();
+
+  if (key === "0x0000000000000000000000000000000000000006") {
+    return {
+      verified: true,
+      files: [
+        {
+          path: "SourcifyOnly.sol",
+          content: "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract SourcifyOnly { uint256 public x; }"
+        }
+      ],
+      metadata: {
+        sourceProvider: "sourcify",
+        mocked: true,
+        chainId
+      }
+    };
+  }
+
+  return {
+    verified: false,
+    files: [],
+    metadata: {
+      sourceProvider: "sourcify",
+      mocked: true
+    },
+    reason: "SOURCE_UNVERIFIED"
+  };
+}
+
 async function fetchFromSourcify(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+  if (usingSourceStub()) {
+    return mockSourcifyResponse(chainId, address);
+  }
+
   const base = `${config.SOURCIFY_API_URL}/${chainId}/${address}`;
   const metadataUrl = `${base}/metadata.json`;
 

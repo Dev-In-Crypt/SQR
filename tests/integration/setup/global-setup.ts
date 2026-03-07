@@ -208,6 +208,9 @@ export default async function integrationGlobalSetup() {
       BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: receiptContractAddress,
       ENABLE_SLITHER: "true",
+      SQR_TEST_SOURCE_STUB: "1",
+      SQR_TEST_BASESCAN_MAX_ATTEMPTS: "3",
+      SQR_TEST_BASESCAN_TOTAL_TIMEOUT_MS: "1500",
       OPENAI_API_KEY: "",
       REDIS_URL: redisUrl || "",
       SQR_NEXT_DIST_DIR: runScopedDistDir,
@@ -244,6 +247,7 @@ export default async function integrationGlobalSetup() {
     process.env.SQR_TEST_RECEIPT_CONTRACT = receiptContractAddress;
     process.env.SQR_TEST_MINT_PRIVATE_KEY = ANVIL_DEPLOYER_PRIVATE_KEY;
     process.env.SQR_TEST_WITH_REDIS = redisRequested ? "1" : "0";
+    process.env.SQR_TEST_SOURCE_STUB = "1";
 
     return async () => {
       cleanupController.unregister();

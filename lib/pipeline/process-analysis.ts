@@ -109,6 +109,12 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
     const sourceBundle = asSourceBundle(analysis.sourceBundle.sourceJson);
     const sourceMeta = (analysis.sourceBundle.sourceMetaJson ?? {}) as Record<string, unknown>;
     const snippetCompleteness = readSnippetCompleteness(sourceMeta.snippetCompleteness);
+    const pasteWarnings = Array.isArray(sourceMeta.pasteWarnings)
+      ? sourceMeta.pasteWarnings.filter((item): item is string => typeof item === "string")
+      : [];
+    const sourceWarnings = Array.isArray(sourceMeta.warnings)
+      ? sourceMeta.warnings.filter((item): item is string => typeof item === "string")
+      : [];
     const isSnippetIncomplete =
       sourceBundle.inputType === "PASTE_CODE" &&
       snippetCompleteness !== null &&
@@ -121,12 +127,8 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       slitherRequired: !isSnippetInput
     });
 
-    const warnings = [...staticScan.warnings];
+    const warnings = [...pasteWarnings, ...sourceWarnings, ...staticScan.warnings];
     const partialReasons: string[] = [];
-
-    if (isSnippetIncomplete) {
-      warnings.push("PARTIAL_SOLIDITY_INCOMPLETE");
-    }
 
     if (staticScan.scannerErrors.length > 0) {
       partialReasons.push("PARTIAL_SCANNER_FAILURE");

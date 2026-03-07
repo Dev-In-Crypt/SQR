@@ -9,14 +9,14 @@ export const createAnalysisSchema = z
     wallet: z.string().optional()
   })
   .superRefine((value, ctx) => {
-    if (value.inputType === "PASTE_CODE" && !value.code) {
+    if (value.inputType === "PASTE_CODE" && value.code === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "code is required for PASTE_CODE"
       });
     }
 
-    if (value.inputType === "BASE_ADDRESS" && !value.address) {
+    if (value.inputType === "BASE_ADDRESS" && value.address === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "address is required for BASE_ADDRESS"

@@ -8,6 +8,7 @@ import WalletButton from "@/app/components/WalletButton";
 import { providerErrorCode } from "@/lib/eip1193";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { receiptRegistryAbi } from "@/lib/receipt-shared";
+import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
 import { EnsureChainError, ensureChain, readWalletChainHex } from "@/lib/wallet-chain";
 
 type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
@@ -91,7 +92,7 @@ interface PreparedReceiptResponse {
       deadline: string;
     };
   };
-  error?: { message?: string };
+  error?: { code?: string; message?: string };
 }
 
 interface RuntimeConfigResponse {
@@ -157,9 +158,16 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       }
     );
 
-    const json = (await response.json()) as ReportApiResponse | { error?: { message?: string } };
+    const json = (await response.json()) as ReportApiResponse | { error?: { code?: string; message?: string } };
     if (!response.ok) {
-      throw new Error((json as { error?: { message?: string } }).error?.message || "Failed to load report");
+      const err = (json as { error?: { code?: string; message?: string } }).error;
+      throw new Error(
+        resolveUserErrorMessage({
+          code: err?.code,
+          fallbackMessage: err?.message,
+          defaultMessage: "Failed to load report"
+        })
+      );
     }
 
     setData(json as ReportApiResponse);
@@ -170,9 +178,16 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       cache: "no-store"
     });
 
-    const json = (await response.json()) as RuntimeConfigResponse | { error?: { message?: string } };
+    const json = (await response.json()) as RuntimeConfigResponse | { error?: { code?: string; message?: string } };
     if (!response.ok) {
-      throw new Error((json as { error?: { message?: string } }).error?.message || "Failed to load runtime config");
+      const err = (json as { error?: { code?: string; message?: string } }).error;
+      throw new Error(
+        resolveUserErrorMessage({
+          code: err?.code,
+          fallbackMessage: err?.message,
+          defaultMessage: "Failed to load runtime config"
+        })
+      );
     }
 
     const receiptConfig = (json as RuntimeConfigResponse).receipt;
@@ -302,7 +317,13 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     const prepJson = (await prepResp.json()) as PreparedReceiptResponse;
 
     if (!prepResp.ok) {
-      throw new Error(prepJson.error?.message || "Could not prepare receipt mint");
+      throw new Error(
+        resolveUserErrorMessage({
+          code: (prepJson as { error?: { code?: string } }).error?.code,
+          fallbackMessage: prepJson.error?.message,
+          defaultMessage: "Could not prepare receipt mint"
+        })
+      );
     }
 
     return prepJson;
@@ -441,11 +462,17 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       });
 
       const confirmJson = (await confirmResp.json()) as {
-        error?: { message?: string };
+        error?: { code?: string; message?: string };
       };
 
       if (!confirmResp.ok) {
-        throw new Error(confirmJson.error?.message || "Receipt confirmation failed");
+        throw new Error(
+          resolveUserErrorMessage({
+            code: confirmJson.error?.code,
+            fallbackMessage: confirmJson.error?.message,
+            defaultMessage: "Receipt confirmation failed"
+          })
+        );
       }
 
       await loadReport();

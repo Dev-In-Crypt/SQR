@@ -4,6 +4,7 @@ import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { requiredReceiptChainId } from "@/lib/base-network";
 import { prisma } from "@/lib/db";
+import { ApiError } from "@/lib/errors";
 import {
   explorerTxUrl,
   hasTransactionReceiptOnRequiredChain,
@@ -70,12 +71,22 @@ export async function POST(
       metadata?: { contractAddress?: string };
     };
 
-    const onRequiredNetwork = await hasTransactionReceiptOnRequiredChain(payload.txHash);
+    let onRequiredNetwork = false;
+    try {
+      onRequiredNetwork = await hasTransactionReceiptOnRequiredChain(payload.txHash);
+    } catch {
+      return fail(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
+    }
     if (!onRequiredNetwork) {
       return fail(400, "TX_NOT_FOUND_REQUIRED_NETWORK", "tx not found on required network");
     }
 
-    const eventData = await readMintedEventFromTx(payload.txHash).catch(() => null);
+    let eventData: Awaited<ReturnType<typeof readMintedEventFromTx>> = null;
+    try {
+      eventData = await readMintedEventFromTx(payload.txHash);
+    } catch {
+      return fail(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
+    }
 
     if (!eventData) {
       return fail(400, "MINT_EVENT_NOT_FOUND", "ReceiptMinted event not found for this transaction");
@@ -85,14 +96,27 @@ export async function POST(
       return fail(400, "HASH_MISMATCH", "Transaction event reportHash does not match this report");
     }
 
-    const recoveredOwner = await recoverMintAuthorizationSigner({
-      reportHash: report.reportHash,
-      contractAddress: reportJson.metadata?.contractAddress ?? null,
-      owner: payload.owner,
-      nonce: payload.nonce,
-      deadline: payload.deadline,
-      signature: payload.signature
-    });
+    let recoveredOwner: string;
+    try {
+      recoveredOwner = await recoverMintAuthorizationSigner({
+        reportHash: report.reportHash,
+        contractAddress: reportJson.metadata?.contractAddress ?? null,
+        owner: payload.owner,
+        nonce: payload.nonce,
+        deadline: payload.deadline,
+        signature: payload.signature
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "INVALID_SIGNATURE") {
+        return fail(400, "INVALID_SIGNATURE", "Mint authorization signature is invalid");
+      }
+
+      if (error instanceof ApiError && error.status >= 500) {
+        return fail(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt subsystem is temporarily unavailable.");
+      }
+
+      return fail(400, "INVALID_SIGNATURE", "Mint authorization signature is invalid");
+    }
 
     if (recoveredOwner.toLowerCase() !== payload.owner.toLowerCase()) {
       return fail(400, "INVALID_SIGNATURE", "Mint authorization signature is invalid");

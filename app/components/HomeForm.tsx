@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import WalletButton from "@/app/components/WalletButton";
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
+import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
 
 type InputTab = "PASTE_CODE" | "BASE_ADDRESS";
 
@@ -78,11 +79,17 @@ export default function HomeForm() {
 
       const json = (await response.json()) as {
         analysisId?: string;
-        error?: { message?: string };
+        error?: { code?: string; message?: string };
       };
 
       if (!response.ok || !json.analysisId) {
-        throw new Error(json.error?.message || "Failed to create analysis");
+        throw new Error(
+          resolveUserErrorMessage({
+            code: json.error?.code,
+            fallbackMessage: json.error?.message,
+            defaultMessage: "Failed to create analysis"
+          })
+        );
       }
 
       window.location.href = `/analysis/${json.analysisId}`;

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createPasteAnalysisAndWait, createSession, uniqueCodeSnippet } from "./setup/helpers";
 
 describe("API integration - failure handling", () => {
-  it("incomplete snippet is processed as DONE_WITH_WARNINGS with warning code", async () => {
+  it("incomplete snippet is rejected at API boundary with stable 4xx code", async () => {
     const session = createSession({ ip: "198.51.100.50" });
 
     const malformed = [
@@ -14,27 +14,16 @@ describe("API integration - failure handling", () => {
       "    if (true) {"
     ].join("\n");
 
-    const created = await createPasteAnalysisAndWait(session, malformed);
-
-    const report = await session.getJson<{
-      reportId: string;
-      report: {
-        warnings: string[];
-        scannerErrors: string[];
-        partialReasons: string[];
-      };
+    const response = await session.postJson<{
       error?: { code: string; message: string };
-    }>(
-      `/api/v1/report/${created.reportId}${
-        created.privateToken ? `?token=${encodeURIComponent(created.privateToken)}` : ""
-      }`
-    );
+    }>("/api/v1/analysis", {
+      inputType: "PASTE_CODE",
+      code: malformed,
+      chainId: 8453
+    });
 
-    expect(report.status).toBe(200);
-    expect(created.terminalStatus).toBe("DONE_WITH_WARNINGS");
-    expect(report.body.report.warnings).toContain("PARTIAL_SOLIDITY_INCOMPLETE");
-    expect(report.body.report.partialReasons).not.toContain("PARTIAL_SCANNER_FAILURE");
-    expect(report.body.report.scannerErrors.some((item) => item.startsWith("SLITHER_ERROR"))).toBe(false);
+    expect(response.status).toBe(400);
+    expect(response.body.error?.code).toBe("INCOMPLETE_SNIPPET");
   });
 
   it("scanner failure on complete snippet is warning-only and preserves diagnostics", async () => {

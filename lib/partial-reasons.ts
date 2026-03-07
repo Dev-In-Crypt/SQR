@@ -9,6 +9,15 @@ export const PARTIAL_REASON_TEXT: Record<PartialReasonCode, string> = {
 
 const WARNING_TEXT: Record<string, string> = {
   PARTIAL_SOLIDITY_INCOMPLETE: PARTIAL_REASON_TEXT.PARTIAL_SOLIDITY_INCOMPLETE,
+  MISSING_PRAGMA: "Solidity pragma not found; default compiler-policy compatibility checks are reduced.",
+  UNSUPPORTED_PRAGMA_RANGE: "Pragma range is outside supported policy (0.8.x preferred).",
+  IMPORT_STATEMENT_PRESENT: "Import statements were detected; unresolved dependencies may reduce scan depth.",
+  UNICODE_ZERO_WIDTH_REMOVED: "Zero-width Unicode characters were removed during sanitization.",
+  MIXED_NEWLINES_NORMALIZED: "Mixed newline styles were normalized for deterministic processing.",
+  RISKY_DELEGATECALL_PRESENT: "delegatecall usage detected and flagged for manual review.",
+  RISKY_ASSEMBLY_PRESENT: "inline assembly detected and flagged for manual review.",
+  RISKY_CALL_VALUE_PRESENT: "low-level call with value detected and flagged for manual review.",
+  PROXY_DETECTED: "Proxy contract metadata detected; implementation context should be reviewed.",
   SLITHER_SKIPPED_SOLC_MISSING:
     "Slither standalone scan was skipped because solc was not available via SOLC_PATH or PATH.",
   SLITHER_SKIPPED_NOT_APPLICABLE:

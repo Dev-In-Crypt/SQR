@@ -31,17 +31,21 @@ export async function POST(
       return fail(404, "NOT_FOUND", "Report not found");
     }
 
+    if (!session.walletAddress) {
+      return fail(401, "WALLET_REQUIRED", "Wallet login is required for receipt minting");
+    }
+
     const owner = isReportOwner(report, {
       userId: session.userId,
       sessionId: session.sessionId
     });
 
     if (!owner) {
-      return fail(403, "FORBIDDEN", "Only owner can mint receipt");
-    }
-
-    if (!session.walletAddress) {
-      return fail(401, "WALLET_REQUIRED", "Wallet login is required for receipt minting");
+      return fail(
+        403,
+        "OWNER_MISMATCH",
+        "Connected wallet does not match the report owner. Switch wallet and retry."
+      );
     }
 
     if (report.receipt) {
