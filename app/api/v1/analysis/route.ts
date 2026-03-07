@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ok, handleRouteError } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
-import { enqueueAnalysisJob } from "@/lib/queue";
+import { assertAnalysisQueueReady, enqueueAnalysisJob } from "@/lib/queue";
 import { enforceAnalysisCreateRateLimit } from "@/lib/rate-limit";
 import { getClientIp, getSessionContext } from "@/lib/session";
 import { computeInputHash, sourceBundleFromAddress, sourceBundleFromPaste } from "@/lib/source";
@@ -103,6 +103,10 @@ export async function POST(request: Request) {
       } else {
         throw error;
       }
+    }
+
+    if (!failCode) {
+      await assertAnalysisQueueReady();
     }
 
     const analysis = await prisma.analysisRequest.create({

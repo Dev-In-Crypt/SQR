@@ -9,6 +9,17 @@ export function logInfo(message: string, context: Record<string, unknown> = {}):
   );
 }
 
+export function logWarn(message: string, context: Record<string, unknown> = {}): void {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      message,
+      ...context,
+      ts: new Date().toISOString()
+    })
+  );
+}
+
 export function logError(message: string, context: Record<string, unknown> = {}): void {
   console.error(
     JSON.stringify({

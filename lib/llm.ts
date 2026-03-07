@@ -2,6 +2,7 @@ import type { Finding } from "@/lib/types";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
+import { EXECUTIVE_SUMMARY_SYSTEM_PROMPT } from "@/lib/prompts";
 
 function localExecutiveSummary(findings: Finding[], partialReasons: string[]): string {
   if (findings.length === 0) {
@@ -43,8 +44,7 @@ export async function generateExecutiveSummary(params: {
     messages: [
       {
         role: "system",
-        content:
-          "You are a Solidity security reviewer. Write a concise 5-10 line executive summary only from provided findings. Never invent issues. Mention uncertainty when applicable."
+        content: EXECUTIVE_SUMMARY_SYSTEM_PROMPT
       },
       {
         role: "user",

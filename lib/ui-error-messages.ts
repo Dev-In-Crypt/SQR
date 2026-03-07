@@ -5,6 +5,7 @@ export const UI_ERROR_MESSAGES: Record<string, string> = {
   INVALID_PRAGMA: "Malformed pragma. Use a valid Solidity pragma declaration.",
   CONTROL_CHARS_NOT_ALLOWED: "Input contains unsupported control characters.",
   LINE_LIMIT_EXCEEDED: "Paste mode supports up to 200 lines.",
+  WORKER_UNAVAILABLE: "Analysis worker is unavailable. Start worker process and retry.",
   OWNER_MISMATCH: "Connected wallet does not match the report owner. Switch wallet and retry.",
   INVALID_SIGNATURE: "Mint authorization signature is invalid.",
   TX_NOT_FOUND_REQUIRED_NETWORK: "Transaction was not found on the required network.",

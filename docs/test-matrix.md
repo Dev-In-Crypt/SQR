@@ -10,6 +10,7 @@
 | Wallet auth nonce replay protection | N/A | `tests/integration/auth-history-rate-limit.integration.test.ts` | N/A | N/A |
 | Wallet-scoped report history | N/A | `tests/integration/auth-history-rate-limit.integration.test.ts` | N/A | N/A |
 | Rate limiting (IP/wallet/mixed) | N/A | `tests/integration/auth-history-rate-limit.integration.test.ts` | N/A | N/A |
+| Queue readiness health probe | N/A | `tests/integration/health.integration.test.ts` | N/A | N/A |
 | Receipt prepare/confirm correctness | N/A | `tests/integration/receipt.integration.test.ts` | `tests/e2e/smoke.receipt.viem.spec.ts` | `contracts/test/ReceiptRegistry.t.sol` |
 | Receipt owner signature auth (EIP-712 + nonce/deadline) | N/A | `tests/integration/receipt.integration.test.ts` | `tests/e2e/smoke.receipt.viem.spec.ts` | `contracts/test/ReceiptRegistry.t.sol`, `contracts/test/ReceiptRegistry.fuzz.t.sol`, `contracts/test/ReceiptRegistry.invariant.t.sol` |
 | Receipt duplicate determinism | N/A | `tests/integration/receipt.integration.test.ts` | N/A | `contracts/test/ReceiptRegistry.t.sol`, `contracts/test/ReceiptRegistry.fuzz.t.sol` |

@@ -17,6 +17,18 @@ Next.js fullstack application for Solidity quick risk review with:
 - Vitest (unit + integration)
 - Playwright (E2E smoke)
 
+## Module boundaries (MVP-safe)
+- New additive facade entrypoints:
+  - `@/lib/core`
+  - `@/lib/infra`
+  - `@/lib/runtime`
+  - `@/lib/domains/analysis`
+  - `@/lib/domains/auth`
+  - `@/lib/domains/receipt`
+- Existing `@/lib/*` imports remain valid during MVP and are not mass-rewritten.
+- Post-MVP file moves should use compatibility shims at old paths.
+- Detailed policy: `docs/module-boundaries.md`.
+
 ## Quick start
 1. Copy env:
 ```bash
@@ -53,6 +65,7 @@ If Redis is not configured, analysis jobs are processed inline by the API proces
 - `GET /r/[reportId]?token=...`
 - `GET /history`
 - `GET /receipt/[reportId]`
+- `GET /api/v1/health`
 
 ## API v1
 - `POST /api/v1/analysis`
@@ -62,6 +75,7 @@ If Redis is not configured, analysis jobs are processed inline by the API proces
 - `POST /api/v1/report/{reportId}/share-token`
 - `GET /api/v1/history`
 - `GET /api/v1/config`
+- `GET /api/v1/health`
 - `POST /api/v1/receipt/{reportId}/prepare`
 - `POST /api/v1/receipt/{reportId}/confirm`
 - `POST /api/v1/auth/nonce`
@@ -109,6 +123,11 @@ If Redis is not configured, analysis jobs are processed inline by the API proces
 ### 1) Lint
 ```bash
 npm run lint
+```
+
+Optional boundary guard for new files only (warning-only by default):
+```bash
+npm run lint:boundaries:new
 ```
 
 ### 2) Unit tests
@@ -188,6 +207,8 @@ npm run test:all
 - `BASE_MAINNET_RPC_URL` (preferred Base mainnet RPC for receipt reads and wallet add/switch)
 - `BASE_SEPOLIA_RPC_URL` (preferred Base Sepolia RPC for receipt reads and wallet add/switch)
 - `RECEIPT_CONTRACT_ADDRESS` (required for receipt prepare/confirm)
+- `TRUSTED_IP_HEADERS` (ordered trusted headers for client IP extraction)
+- `TRUST_PROXY_HOPS` (trusted proxy hops used for `x-forwarded-for` parsing)
 - `SOLC_PATH` (optional absolute path to `solc`/`solc.exe` used by snippet standalone Slither scans)
 - `OPENAI_API_KEY` (optional; if empty, app uses local summary fallback)
 - `OPENAI_BASE_URL` (default `https://api.openai.com/v1`; set `https://openrouter.ai/api/v1` for OpenRouter)
@@ -210,7 +231,12 @@ Set from shell or CI:
 - Optional overrides:
   - `SQR_E2E_PORT`
   - `SQR_E2E_ANVIL_PORT`
-  - `SQR_NEXT_DIST_DIR` (optional; normally auto-managed by the E2E harness)
+- `SQR_NEXT_DIST_DIR` (optional; normally auto-managed by the E2E harness)
+
+## Production process set
+- Required processes: `web` + `worker`.
+- If `REDIS_URL` is configured and worker is down, analysis create now returns `503 WORKER_UNAVAILABLE` instead of accepting stuck queued jobs.
+- Readiness probe: `GET /api/v1/health` returns `200` only when analysis queue mode is ready (or inline mode is active).
 
 ## Environments: local vs staging vs production
 - `local`: developer and CI test runs, local Anvil for chain tests.

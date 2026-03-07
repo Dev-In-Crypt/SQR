@@ -1,6 +1,7 @@
 ﻿import { Queue, Worker, type Job, type ConnectionOptions } from "bullmq";
 
 import { config } from "@/lib/config";
+import { ApiError } from "@/lib/errors";
 import { logError, logInfo } from "@/lib/logger";
 
 const ANALYSIS_QUEUE = "analysis-jobs";
@@ -58,6 +59,56 @@ const queue = bullConnection
       }
     })
   : null;
+
+export function isAnalysisQueueEnabled(): boolean {
+  return Boolean(queue);
+}
+
+export async function analysisQueueReadiness(): Promise<{
+  mode: "inline" | "redis";
+  workerCount: number;
+  ready: boolean;
+}> {
+  if (!queue) {
+    return {
+      mode: "inline",
+      workerCount: 0,
+      ready: true
+    };
+  }
+
+  try {
+    await queue.waitUntilReady();
+    const workers = await queue.getWorkers();
+
+    return {
+      mode: "redis",
+      workerCount: workers.length,
+      ready: workers.length > 0
+    };
+  } catch (error) {
+    logError("Analysis queue readiness check failed", {
+      error: error instanceof Error ? error.message : String(error)
+    });
+
+    return {
+      mode: "redis",
+      workerCount: 0,
+      ready: false
+    };
+  }
+}
+
+export async function assertAnalysisQueueReady(): Promise<void> {
+  const readiness = await analysisQueueReadiness();
+  if (readiness.mode === "redis" && !readiness.ready) {
+    throw new ApiError(
+      503,
+      "WORKER_UNAVAILABLE",
+      "Analysis worker is unavailable. Start worker process and retry."
+    );
+  }
+}
 
 export async function enqueueAnalysisJob(analysisId: string): Promise<void> {
   if (!queue) {

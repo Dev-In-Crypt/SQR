@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAddress } from "viem";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -28,23 +29,68 @@ const envSchema = z.object({
   OPENAI_TEMPERATURE: z.coerce.number().default(0),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
+  TRUSTED_IP_HEADERS: z
+    .string()
+    .default("cf-connecting-ip,x-real-ip,x-vercel-forwarded-for,x-forwarded-for"),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   SESSION_COOKIE_NAME: z.string().default("sqr_session"),
   SESSION_DAYS: z.coerce.number().default(30),
   PRIVATE_LINK_SECRET: z.string().default("dev-secret-change-me")
 });
 
-const parsed = envSchema.safeParse(process.env);
-if (!parsed.success) {
-  const formatted = parsed.error.issues
-    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
-    .join("; ");
-  throw new Error(`Invalid environment: ${formatted}`);
+function ensureProductionConfig(env: z.infer<typeof envSchema>): void {
+  if (env.APP_ENV !== "production") {
+    return;
+  }
+
+  const problems: string[] = [];
+
+  if (!env.RECEIPT_CONTRACT_ADDRESS) {
+    problems.push("RECEIPT_CONTRACT_ADDRESS is required when APP_ENV=production");
+  } else if (!isAddress(env.RECEIPT_CONTRACT_ADDRESS)) {
+    problems.push("RECEIPT_CONTRACT_ADDRESS must be a valid 20-byte hex address");
+  }
+
+  if (!env.BASE_MAINNET_RPC_URL && !env.BASE_RPC_URL) {
+    problems.push("BASE_MAINNET_RPC_URL (or BASE_RPC_URL) is required when APP_ENV=production");
+  }
+
+  if (env.PRIVATE_LINK_SECRET === "dev-secret-change-me") {
+    problems.push("PRIVATE_LINK_SECRET must be replaced in production");
+  } else if (env.PRIVATE_LINK_SECRET.length < 32) {
+    problems.push("PRIVATE_LINK_SECRET must be at least 32 characters in production");
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`Invalid production configuration: ${problems.join("; ")}`);
+  }
 }
 
-const env = parsed.data;
+function parseEnv(rawEnv: NodeJS.ProcessEnv): z.infer<typeof envSchema> {
+  const parsed = envSchema.safeParse(rawEnv);
+  if (!parsed.success) {
+    const formatted = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`Invalid environment: ${formatted}`);
+  }
 
-export const config = {
-  ...env,
-  isProd: env.NODE_ENV === "production",
-  slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
-};
+  ensureProductionConfig(parsed.data);
+  return parsed.data;
+}
+
+export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
+  const env = parseEnv(rawEnv);
+
+  return {
+    ...env,
+    trustedIpHeaders: env.TRUSTED_IP_HEADERS
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => item.length > 0),
+    isProd: env.NODE_ENV === "production",
+    slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
+  };
+}
+
+export const config = buildConfig();

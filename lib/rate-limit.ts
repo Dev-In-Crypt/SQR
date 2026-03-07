@@ -1,7 +1,9 @@
 import { ApiError } from "@/lib/errors";
 import { getRedis } from "@/lib/redis";
+import { logWarn } from "@/lib/logger";
 
 const memoryCounters = new Map<string, { count: number; expiresAt: number }>();
+let lastRedisFallbackLogAt = 0;
 
 function secondsUntilUtcDayEnd(): number {
   const now = new Date();
@@ -17,12 +19,23 @@ async function incrementKey(key: string): Promise<number> {
   const redis = getRedis();
 
   if (redis) {
-    await redis.connect().catch(() => undefined);
-    const count = await redis.incr(key);
-    if (count === 1) {
-      await redis.expire(key, secondsUntilUtcDayEnd());
+    try {
+      await redis.connect().catch(() => undefined);
+      const count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, secondsUntilUtcDayEnd());
+      }
+      return count;
+    } catch (error) {
+      const now = Date.now();
+      if (now - lastRedisFallbackLogAt > 30_000) {
+        lastRedisFallbackLogAt = now;
+        logWarn("Rate limit Redis unavailable; using in-memory fallback", {
+          key,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
-    return count;
   }
 
   const existing = memoryCounters.get(key);

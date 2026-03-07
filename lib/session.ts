@@ -1,5 +1,6 @@
 ﻿import { cookies, headers } from "next/headers";
 
+import { resolveClientIp } from "@/lib/client-ip";
 import { config } from "@/lib/config";
 import { prisma } from "@/lib/db";
 
@@ -48,10 +49,10 @@ export async function getSessionContext(): Promise<SessionContext> {
 
 export async function getClientIp(): Promise<string> {
   const headerStore = await headers();
-  const fwd = headerStore.get("x-forwarded-for");
-  if (!fwd) {
-    return "0.0.0.0";
-  }
-
-  return fwd.split(",")[0]?.trim() || "0.0.0.0";
+  return resolveClientIp({
+    getHeader: (name) => headerStore.get(name),
+    trustedHeaders: config.trustedIpHeaders,
+    trustedProxyHops: config.TRUST_PROXY_HOPS,
+    fallbackIp: "0.0.0.0"
+  });
 }

@@ -12,6 +12,7 @@ This document is the canonical mapping for user-visible error handling in paste 
 | `INVALID_PRAGMA` | 400 | Malformed pragma. Use a valid Solidity pragma declaration. | No |
 | `CONTROL_CHARS_NOT_ALLOWED` | 400 | Input contains unsupported control characters. | No |
 | `LINE_LIMIT_EXCEEDED` | 400 | Paste mode supports up to 200 lines. | No |
+| `WORKER_UNAVAILABLE` | 503 | Analysis worker is unavailable. Start worker process and retry. | Yes |
 | `OWNER_MISMATCH` | 403 | Connected wallet does not match the report owner. Switch wallet and retry. | No |
 | `INVALID_SIGNATURE` | 400 | Mint authorization signature is invalid. | No |
 | `TX_NOT_FOUND_REQUIRED_NETWORK` | 400 | Transaction was not found on the required network. | Depends (after wrong tx hash fix) |
