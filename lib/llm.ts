@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import type { AIAuditFinding, Finding, SourceBundle } from "@/lib/types";
+import * as contractStructure from "@/lib/contract-structure";
+import { filterAIAuditFindings } from "@/lib/ai-audit-post-filter";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
@@ -103,7 +105,7 @@ export async function generateExecutiveSummary(params: {
   }
 
   const payload = {
-    model: config.OPENAI_MODEL,
+    model: config.OPENAI_GENERAL_MODEL,
     temperature: config.OPENAI_TEMPERATURE,
     messages: [
       {
@@ -175,9 +177,55 @@ export async function generateAIAuditFindings(params: {
     path: file.path,
     content: file.content
   }));
+  let structuredAuditContext: unknown;
+
+  if (config.structuredAuditContextEnabled) {
+    try {
+      structuredAuditContext = contractStructure.buildStructuredAuditContext(params.sourceBundle);
+    } catch (error) {
+      logError("Structured audit context extraction failed", {
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const inputPayload: Record<string, unknown> = {
+    source: {
+      inputType: params.sourceBundle.inputType,
+      chainId: params.sourceBundle.chainId,
+      contractAddress: params.sourceBundle.contractAddress || null,
+      pragma: typeof sourceMeta.solidityPragma === "string" ? sourceMeta.solidityPragma : null,
+      pragmaFilePath:
+        typeof sourceMeta.solidityPragmaFilePath === "string" ? sourceMeta.solidityPragmaFilePath : null,
+      pragmaParseError:
+        typeof sourceMeta.solidityPragmaParseError === "string"
+          ? sourceMeta.solidityPragmaParseError
+          : null,
+      files: sourceCode
+    },
+    scanner: {
+      findings: params.scannerFindings.map((finding) => ({
+        title: finding.title,
+        severity: finding.severity,
+        whyItMatters: finding.whyItMatters,
+        fixDirection: finding.fixDirection,
+        evidence: finding.evidence,
+        confidence: finding.confidence,
+        needsManualCheck: finding.needsManualCheck
+      })),
+      warnings: params.warnings,
+      scannerErrors: params.scannerErrors,
+      partialReasons: params.partialReasons,
+      partialReasonText: params.partialReasons.map((reason) => describeAnalysisNote(reason))
+    }
+  };
+
+  if (structuredAuditContext) {
+    inputPayload.structuredAuditContext = structuredAuditContext;
+  }
 
   const payload = {
-    model: config.OPENAI_MODEL,
+    model: config.OPENAI_AUDIT_MODEL || config.OPENAI_GENERAL_MODEL,
     temperature: 0,
     messages: [
       {
@@ -204,36 +252,7 @@ export async function generateAIAuditFindings(params: {
             omitUncertainFindings: true,
             ifNone: []
           },
-          input: {
-            source: {
-              inputType: params.sourceBundle.inputType,
-              chainId: params.sourceBundle.chainId,
-              contractAddress: params.sourceBundle.contractAddress || null,
-              pragma: typeof sourceMeta.solidityPragma === "string" ? sourceMeta.solidityPragma : null,
-              pragmaFilePath:
-                typeof sourceMeta.solidityPragmaFilePath === "string" ? sourceMeta.solidityPragmaFilePath : null,
-              pragmaParseError:
-                typeof sourceMeta.solidityPragmaParseError === "string"
-                  ? sourceMeta.solidityPragmaParseError
-                  : null,
-              files: sourceCode
-            },
-            scanner: {
-              findings: params.scannerFindings.map((finding) => ({
-                title: finding.title,
-                severity: finding.severity,
-                whyItMatters: finding.whyItMatters,
-                fixDirection: finding.fixDirection,
-                evidence: finding.evidence,
-                confidence: finding.confidence,
-                needsManualCheck: finding.needsManualCheck
-              })),
-              warnings: params.warnings,
-              scannerErrors: params.scannerErrors,
-              partialReasons: params.partialReasons,
-              partialReasonText: params.partialReasons.map((reason) => describeAnalysisNote(reason))
-            }
-          }
+          input: inputPayload
         })
       }
     ]
@@ -267,7 +286,7 @@ export async function generateAIAuditFindings(params: {
     const normalized = maybeStripJsonCodeFence(content);
     try {
       const parsed = JSON.parse(normalized) as unknown;
-      return toAIAuditFindings(parsed);
+      return filterAIAuditFindings(toAIAuditFindings(parsed));
     } catch {
       logError("AI audit response was not valid JSON", {
         endpoint,

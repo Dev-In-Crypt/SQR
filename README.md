@@ -214,9 +214,12 @@ npm run test:all
 - `SOLC_VERSION_MANAGER` (optional; set `solc-select` to use installed `solc-select` versions for pragma-compatible resolution)
 - `SOLC_FALLBACK_PATH` (optional absolute fallback solc binary when `SOLC_PATH` is not set)
 - `SOLC_CACHE_DIR` (optional compiler cache hint for local runtime tooling)
+- `ENABLE_STRUCTURED_AUDIT_CONTEXT` (default `true`; backend-only flag that adds deterministic contract structure context to AI audit input)
 - `OPENAI_API_KEY` (optional; if empty, app uses local summary fallback)
 - `OPENAI_BASE_URL` (default `https://api.openai.com/v1`; set `https://openrouter.ai/api/v1` for OpenRouter)
-- `OPENAI_MODEL` (for OpenRouter use provider-prefixed model id, e.g. `openai/gpt-4.1-mini`)
+- `OPENAI_GENERAL_MODEL` (used for summaries/formatting/explanations; default `gpt-4.1-mini`)
+- `OPENAI_AUDIT_MODEL` (used for AI smart contract audit stage; falls back to `OPENAI_GENERAL_MODEL` when unset)
+- `OPENAI_MODEL` (legacy alias for `OPENAI_GENERAL_MODEL` to keep older env files working)
 - `OPENAI_HTTP_REFERER` and `OPENAI_APP_NAME` (optional OpenRouter attribution headers)
 
 ### Integration tests
@@ -369,8 +372,5 @@ npm run security:slither:triage
 - Private link token is stored hashed in DB (`privateTokenHash`).
 - Production address analysis enforces Base mainnet chainId 8453.
 - Receipt owner semantics are signature-bound in v0.2.0; pre-v0.2.0 registries should be treated as deprecated for ownership claims.
-
-
-
 
 

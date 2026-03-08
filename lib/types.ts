@@ -79,6 +79,83 @@ export interface SourceBundle {
   sourceHash: string;
 }
 
+export interface StructuredPragmaMeta {
+  expression: string | null;
+  filePath: string | null;
+  parseError: string | null;
+}
+
+export interface StructuredRoleOrPrivilege {
+  name: string;
+  kind: "state_var" | "modifier" | "guard";
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredStateVariable {
+  contractName: string;
+  name: string;
+  declaration: string;
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredCallSite {
+  contractName: string;
+  functionName: string;
+  callType: string;
+  target: string;
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredTokenInteractionSite {
+  contractName: string;
+  functionName: string;
+  method: string;
+  target: string;
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredStateMutatingFunction {
+  contractName: string;
+  functionName: string;
+  visibility: string;
+  mutability: string;
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredLoopLocation {
+  contractName: string;
+  functionName: string;
+  loopType: "for" | "while" | "do";
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredFundControlMap {
+  payoutFunctions: string[];
+  refundFunctions: string[];
+  cancellationFunctions: string[];
+  withdrawalFunctions: string[];
+  privilegedRoles: string[];
+  notes: string[];
+}
+
+export interface StructuredAuditContext {
+  pragma: StructuredPragmaMeta;
+  contractNames: string[];
+  rolesOrPrivilegedAddresses: StructuredRoleOrPrivilege[];
+  stateVariables: StructuredStateVariable[];
+  externalCallSites: StructuredCallSite[];
+  tokenInteractionSites: StructuredTokenInteractionSite[];
+  stateMutatingFunctions: StructuredStateMutatingFunction[];
+  loopLocations: StructuredLoopLocation[];
+  fundControlMap: StructuredFundControlMap;
+}
+
 export interface SnippetCompleteness {
   braceBalance: number;
   contractEndFound: boolean;

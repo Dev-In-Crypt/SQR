@@ -25,11 +25,14 @@ const envSchema = z.object({
   SOLC_VERSION_MANAGER: z.string().default(""),
   SOLC_FALLBACK_PATH: z.string().optional(),
   SOLC_CACHE_DIR: z.string().optional(),
+  ENABLE_STRUCTURED_AUDIT_CONTEXT: z.string().default("true"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   OPENAI_HTTP_REFERER: z.string().url().optional(),
   OPENAI_APP_NAME: z.string().optional(),
-  OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
+  OPENAI_MODEL: z.string().optional(),
+  OPENAI_GENERAL_MODEL: z.string().optional(),
+  OPENAI_AUDIT_MODEL: z.string().optional(),
   OPENAI_TEMPERATURE: z.coerce.number().default(0),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
@@ -85,9 +88,14 @@ function parseEnv(rawEnv: NodeJS.ProcessEnv): z.infer<typeof envSchema> {
 
 export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
   const env = parseEnv(rawEnv);
+  const openAiGeneralModel = env.OPENAI_GENERAL_MODEL?.trim() || env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
+  const openAiAuditModel = env.OPENAI_AUDIT_MODEL?.trim() || openAiGeneralModel;
 
   return {
     ...env,
+    OPENAI_GENERAL_MODEL: openAiGeneralModel,
+    OPENAI_AUDIT_MODEL: openAiAuditModel,
+    structuredAuditContextEnabled: env.ENABLE_STRUCTURED_AUDIT_CONTEXT.toLowerCase() === "true",
     trustedIpHeaders: env.TRUSTED_IP_HEADERS
       .split(",")
       .map((item) => item.trim().toLowerCase())
