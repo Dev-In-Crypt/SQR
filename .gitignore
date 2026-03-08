@@ -80,4 +80,8 @@ tsconfig.e2e_*.json
 Plan.md
 NewPlan.md
 
+# Local private prompts
+lib/prompts.ts
+lib/prompts.local.ts
+prompts/
 

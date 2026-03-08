@@ -4,7 +4,7 @@ import type { AIAuditFinding, Finding, SourceBundle } from "@/lib/types";
 import { config } from "@/lib/config";
 import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
-import { EXECUTIVE_SUMMARY_SYSTEM_PROMPT, SMART_CONTRACT_AUDIT_SYSTEM_PROMPT } from "@/lib/prompts";
+import { getExecutiveSummarySystemPrompt, getSmartContractAuditSystemPrompt } from "@/lib/prompt-provider";
 
 function localExecutiveSummary(findings: Finding[], partialReasons: string[]): string {
   if (findings.length === 0) {
@@ -108,7 +108,7 @@ export async function generateExecutiveSummary(params: {
     messages: [
       {
         role: "system",
-        content: EXECUTIVE_SUMMARY_SYSTEM_PROMPT
+        content: getExecutiveSummarySystemPrompt()
       },
       {
         role: "user",
@@ -182,7 +182,7 @@ export async function generateAIAuditFindings(params: {
     messages: [
       {
         role: "system",
-        content: SMART_CONTRACT_AUDIT_SYSTEM_PROMPT
+        content: getSmartContractAuditSystemPrompt()
       },
       {
         role: "user",
