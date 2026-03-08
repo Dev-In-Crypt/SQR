@@ -19,7 +19,9 @@ type ReportResponse = {
   isOwner: boolean;
   report: {
     executiveSummary: string;
+    scannerSummary?: string;
     findings: unknown[];
+    aiAuditFindings?: unknown[];
     metadata: {
       analyzerVersion: string;
       [key: string]: unknown;
@@ -71,7 +73,9 @@ describe("API integration - analysis, ACL, visibility, share links", () => {
     expect(report.body.reportId).toBe(created.reportId);
     expect(report.body.reportHash).toMatch(/^0x[0-9a-f]{64}$/);
     expect(typeof report.body.report.executiveSummary).toBe("string");
+    expect(typeof report.body.report.scannerSummary).toBe("string");
     expect(Array.isArray(report.body.report.findings)).toBe(true);
+    expect(Array.isArray(report.body.report.aiAuditFindings ?? [])).toBe(true);
     expect(["PRIVATE", "PUBLIC"]).toContain(report.body.visibility);
   });
 

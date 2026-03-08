@@ -31,6 +31,16 @@ export interface Finding {
   fingerprint: string;
 }
 
+export interface AIAuditFinding {
+  severity: Severity;
+  title: string;
+  location: string;
+  explanation: string;
+  evidence: string;
+  fixDirection: string;
+  source: "ai";
+}
+
 export interface ReportMetadata {
   analyzerVersion: string;
   rulesetVersion: string;
@@ -43,7 +53,9 @@ export interface ReportMetadata {
 
 export interface ReportPayload {
   executiveSummary: string;
+  scannerSummary: string;
   findings: Finding[];
+  aiAuditFindings: AIAuditFinding[];
   metadata: ReportMetadata;
   warnings: string[];
   scannerErrors: string[];

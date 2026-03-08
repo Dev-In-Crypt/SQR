@@ -210,6 +210,10 @@ npm run test:all
 - `TRUSTED_IP_HEADERS` (ordered trusted headers for client IP extraction)
 - `TRUST_PROXY_HOPS` (trusted proxy hops used for `x-forwarded-for` parsing)
 - `SOLC_PATH` (optional absolute path to `solc`/`solc.exe` used by snippet standalone Slither scans)
+- `ENABLE_SOLC_AUTO_RESOLVE` (default `true`; when enabled the scanner attempts pragma-aware compiler selection)
+- `SOLC_VERSION_MANAGER` (optional; set `solc-select` to use installed `solc-select` versions for pragma-compatible resolution)
+- `SOLC_FALLBACK_PATH` (optional absolute fallback solc binary when `SOLC_PATH` is not set)
+- `SOLC_CACHE_DIR` (optional compiler cache hint for local runtime tooling)
 - `OPENAI_API_KEY` (optional; if empty, app uses local summary fallback)
 - `OPENAI_BASE_URL` (default `https://api.openai.com/v1`; set `https://openrouter.ai/api/v1` for OpenRouter)
 - `OPENAI_MODEL` (for OpenRouter use provider-prefixed model id, e.g. `openai/gpt-4.1-mini`)
@@ -355,6 +359,8 @@ npm run security:slither:triage
   - rerun the suite; each run uses an isolated `SQR_NEXT_DIST_DIR`, and stale processes are cleaned up automatically.
 - `Slither standalone scan was skipped because solc is not available`:
   - set `SOLC_PATH` to the absolute compiler binary path (for example `C:\solc\solc.exe` on Windows).
+- `No compatible local solc version was found for the source pragma`:
+  - install matching compiler versions (for example with `solc-select`) and set `SOLC_VERSION_MANAGER=solc-select`.
 - receipt confirm hash mismatch:
   - verify tx was minted for the same report and same deployed receipt registry.
 
@@ -363,7 +369,6 @@ npm run security:slither:triage
 - Private link token is stored hashed in DB (`privateTokenHash`).
 - Production address analysis enforces Base mainnet chainId 8453.
 - Receipt owner semantics are signature-bound in v0.2.0; pre-v0.2.0 registries should be treated as deprecated for ownership claims.
-
 
 
 

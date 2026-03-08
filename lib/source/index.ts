@@ -3,6 +3,7 @@ import { isAddress } from "viem";
 import { ApiError } from "@/lib/errors";
 import { hashCanonical } from "@/lib/hash";
 import { config } from "@/lib/config";
+import { extractSolidityPragmaFromFiles, extractSolidityPragmaFromSource } from "@/lib/solidity-pragma";
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
 import type { InputType, SourceBundle, SourceFile } from "@/lib/types";
 import { fetchVerifiedSource } from "@/lib/source/fetch-verified";
@@ -183,6 +184,7 @@ export async function sourceBundleFromPaste(params: {
   const validation = validatePasteCode(params.code);
 
   const files: SourceFile[] = [{ path: "PastedSnippet.sol", content: validation.normalizedCode }];
+  const pragma = extractSolidityPragmaFromSource(validation.normalizedCode);
   const sourceHash = hashSourcePayload({
     inputType: "PASTE_CODE",
     chainId: params.chainId,
@@ -198,7 +200,9 @@ export async function sourceBundleFromPaste(params: {
     sourceMeta: {
       sourceProvider: "paste",
       lineCount: validation.lineCount,
-      pasteWarnings: validation.warnings
+      pasteWarnings: validation.warnings,
+      solidityPragma: pragma?.expression ?? null,
+      solidityPragmaParseError: pragma?.failureReason ?? null
     },
     sourceHash
   };
@@ -229,6 +233,7 @@ export async function sourceBundleFromAddress(params: {
   }
 
   const lineCount = verified.files.reduce((sum, file) => sum + countLines(file.content), 0);
+  const pragma = extractSolidityPragmaFromFiles(verified.files);
   const sourceHash = hashSourcePayload({
     inputType: "BASE_ADDRESS",
     chainId: params.chainId,
@@ -243,7 +248,12 @@ export async function sourceBundleFromAddress(params: {
     files: verified.files,
     lineCount,
     isVerifiedSource: true,
-    sourceMeta: verified.metadata,
+    sourceMeta: {
+      ...verified.metadata,
+      solidityPragma: pragma?.pragma.expression ?? null,
+      solidityPragmaFilePath: pragma?.filePath ?? null,
+      solidityPragmaParseError: pragma?.pragma.failureReason ?? null
+    },
     sourceHash
   };
 }

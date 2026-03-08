@@ -20,6 +20,8 @@ const WARNING_TEXT: Record<string, string> = {
   PROXY_DETECTED: "Proxy contract metadata detected; implementation context should be reviewed.",
   SLITHER_SKIPPED_SOLC_MISSING:
     "Slither standalone scan was skipped because solc was not available via SOLC_PATH or PATH.",
+  SLITHER_SOLC_VERSION_UNRESOLVED:
+    "No compatible local solc version was found for the source pragma; Slither used fallback compiler settings.",
   SLITHER_SKIPPED_NOT_APPLICABLE:
     "Slither scan was skipped because it is not applicable for this input."
 };

@@ -58,8 +58,8 @@ export async function enforceAnalysisCreateRateLimit(params: {
 
   if (!wallet) {
     const ipCount = await incrementKey(`rate:${day}:anon-ip:${ip}`);
-    if (ipCount > 5) {
-      throw new ApiError(429, "RATE_LIMITED", "Daily anonymous limit reached (5/day per IP)");
+    if (ipCount > 30) {
+      throw new ApiError(429, "RATE_LIMITED", "Daily anonymous limit reached (30/day per IP)");
     }
     return;
   }

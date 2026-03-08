@@ -59,13 +59,22 @@ function makeSourceBundle(params: {
 
 describe("scanner runtime modes", () => {
   const originalSolcPath = config.SOLC_PATH;
+  const originalEnableAutoResolve = config.ENABLE_SOLC_AUTO_RESOLVE;
+  const originalSolcVersionManager = config.SOLC_VERSION_MANAGER;
+  const originalSolcFallbackPath = config.SOLC_FALLBACK_PATH;
 
   beforeEach(() => {
     config.SOLC_PATH = undefined;
+    config.ENABLE_SOLC_AUTO_RESOLVE = "false";
+    config.SOLC_VERSION_MANAGER = "";
+    config.SOLC_FALLBACK_PATH = undefined;
   });
 
   afterEach(() => {
     config.SOLC_PATH = originalSolcPath;
+    config.ENABLE_SOLC_AUTO_RESOLVE = originalEnableAutoResolve;
+    config.SOLC_VERSION_MANAGER = originalSolcVersionManager;
+    config.SOLC_FALLBACK_PATH = originalSolcFallbackPath;
   });
 
   it("snippet mode uses standalone solc runtime and ignores foundry mode", async () => {

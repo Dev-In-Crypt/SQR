@@ -95,4 +95,43 @@ describe("API integration - failure handling", () => {
     expect(["DONE_WITH_WARNINGS", "COMPLETED"]).toContain(created.terminalStatus);
     expect(report.body.report.executiveSummary.length).toBeGreaterThan(20);
   });
+
+  it("pragma requiring newer compiler degrades to warning instead of failing pipeline", async () => {
+    const session = createSession({ ip: "198.51.100.53" });
+
+    const newerPragmaInput = [
+      "// SPDX-License-Identifier: MIT",
+      "pragma solidity ^0.8.28;",
+      "contract NewerPragmaContract {",
+      "  uint256 public x;",
+      "  function set(uint256 value) external {",
+      "    x = value;",
+      "  }",
+      "}"
+    ].join("\n");
+
+    const created = await createPasteAnalysisAndWait(session, newerPragmaInput);
+
+    const report = await session.getJson<{
+      report: {
+        warnings: string[];
+      };
+    }>(
+      `/api/v1/report/${created.reportId}${
+        created.privateToken ? `?token=${encodeURIComponent(created.privateToken)}` : ""
+      }`
+    );
+
+    expect(report.status).toBe(200);
+    expect(["COMPLETED", "DONE_WITH_WARNINGS", "PARTIAL"]).toContain(created.terminalStatus);
+    expect(
+      report.body.report.warnings.every(
+        (item) =>
+          item === "SLITHER_SOLC_VERSION_UNRESOLVED" ||
+          item === "SLITHER_SKIPPED_SOLC_MISSING" ||
+          item.startsWith("SLITHER_WARNING:") ||
+          item.startsWith("SLITHER_SOLC_VERSION_UNRESOLVED_DETAIL:")
+      )
+    ).toBe(true);
+  });
 });

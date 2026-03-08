@@ -32,7 +32,17 @@ interface ReportApiResponse {
   isOwner: boolean;
   report: {
     executiveSummary: string;
+    scannerSummary?: string;
     findings: ReportFinding[];
+    aiAuditFindings?: Array<{
+      severity: Severity;
+      title: string;
+      location: string;
+      explanation: string;
+      evidence: string;
+      fixDirection: string;
+      source: "ai";
+    }>;
     metadata: {
       inputType: string;
       chainId: number;
@@ -534,7 +544,10 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             <div className="muted">reportId: {data.reportId}</div>
             <div className="muted">reportHash: {data.reportHash}</div>
-            <p>{data.report.executiveSummary}</p>
+            <div className="stack">
+              <h2 style={{ margin: 0 }}>Scanner Summary</h2>
+              <p>{data.report.scannerSummary || data.report.executiveSummary}</p>
+            </div>
 
             <div className="row">
               <label>
@@ -645,6 +658,37 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 {`${evidence.filePath}${evidence.line ? `:${evidence.line}` : ""}\n${evidence.excerpt}`}
                       </pre>
                     ))}
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+
+          <div className="card stack">
+            <h2 style={{ margin: 0 }}>AI Audit Findings ({data.report.aiAuditFindings?.length ?? 0})</h2>
+            {(data.report.aiAuditFindings?.length ?? 0) === 0 ? (
+              <div>No confirmed AI findings based on provided code evidence.</div>
+            ) : null}
+
+            {(data.report.aiAuditFindings || []).map((finding, idx) => (
+              <details key={`${finding.title}-${idx}`} className="card">
+                <summary className="row" style={{ cursor: "pointer" }}>
+                  <span className={`badge ${finding.severity}`}>{finding.severity}</span>
+                  <strong>{finding.title}</strong>
+                  <span className="badge">{finding.source}</span>
+                </summary>
+                <div className="stack" style={{ marginTop: 10 }}>
+                  <div>
+                    <strong>Location:</strong> {finding.location}
+                  </div>
+                  <div>
+                    <strong>Explanation:</strong> {finding.explanation}
+                  </div>
+                  <div>
+                    <strong>Evidence:</strong> {finding.evidence}
+                  </div>
+                  <div>
+                    <strong>Fix direction:</strong> {finding.fixDirection}
                   </div>
                 </div>
               </details>

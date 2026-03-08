@@ -28,15 +28,49 @@ async function createReportViaUi(page: import("@playwright/test").Page): Promise
   await page.getByRole("button", { name: "Analyze" }).click();
 
   await expect(page).toHaveURL(/\/analysis\//);
-  await page.getByRole("link", { name: "Open report" }).click();
+  const analysisId = new URL(page.url()).pathname.split("/")[2] || "";
+  expect(analysisId).not.toBe("");
 
+  let reportId = "";
+  let privateToken = "";
+  for (let i = 0; i < 90; i += 1) {
+    const response = await page.request.get(`/api/v1/analysis/${analysisId}`);
+    if (!response.ok()) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    const body = (await response.json()) as {
+      reportId: string | null;
+      privateToken: string | null;
+      status: string;
+    };
+
+    if (body.reportId) {
+      reportId = body.reportId;
+      privateToken = body.privateToken || "";
+      break;
+    }
+
+    if (body.status === "FAILED") {
+      break;
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  expect(reportId).not.toBe("");
+  const reportUrl = privateToken
+    ? `/r/${reportId}?token=${encodeURIComponent(privateToken)}`
+    : `/r/${reportId}`;
+  await page.goto(reportUrl);
   await expect(page).toHaveURL(/\/r\//);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
 
   const url = new URL(page.url());
-  const reportId = url.pathname.split("/")[2] || "";
-  expect(reportId).not.toBe("");
-  return reportId;
+  const reportIdFromUrl = url.pathname.split("/")[2] || "";
+  expect(reportIdFromUrl).not.toBe("");
+  return reportIdFromUrl;
 }
 
 test("suite A smoke: paste -> private link -> publish/unpublish -> filter/expand", async ({
@@ -47,7 +81,7 @@ test("suite A smoke: paste -> private link -> publish/unpublish -> filter/expand
   const reportId = await createReportViaUi(page);
 
   await expect(page.getByText(/reportHash:\s*0x[0-9a-f]{64}/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Findings \(/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Findings \(/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Generate private link" }).click();
 

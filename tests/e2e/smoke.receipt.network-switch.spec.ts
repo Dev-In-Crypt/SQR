@@ -52,11 +52,44 @@ async function createReport(page: import("@playwright/test").Page): Promise<{
   await page.getByRole("button", { name: "Analyze" }).click();
 
   await expect(page).toHaveURL(/\/analysis\//);
-  await page.getByRole("link", { name: "Open report" }).click();
-  await expect(page).toHaveURL(/\/r\//);
+  const analysisId = new URL(page.url()).pathname.split("/")[2] || "";
+  expect(analysisId).not.toBe("");
 
-  const url = new URL(page.url());
-  const reportId = url.pathname.split("/")[2] as string;
+  let reportId = "";
+  let privateToken = "";
+  for (let i = 0; i < 90; i += 1) {
+    const response = await page.request.get(`/api/v1/analysis/${analysisId}`);
+    if (!response.ok()) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+
+    const body = (await response.json()) as {
+      reportId: string | null;
+      privateToken: string | null;
+      status: string;
+    };
+
+    if (body.reportId) {
+      reportId = body.reportId;
+      privateToken = body.privateToken || "";
+      break;
+    }
+
+    if (body.status === "FAILED") {
+      break;
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  expect(reportId).toBeTruthy();
+
+  const reportUrl = privateToken
+    ? `/r/${reportId}?token=${encodeURIComponent(privateToken)}`
+    : `/r/${reportId}`;
+  await page.goto(reportUrl);
+  await expect(page).toHaveURL(/\/r\//);
 
   expect(reportId).toBeTruthy();
 
@@ -282,4 +315,3 @@ test("suite B smoke: wrong wallet network triggers switch and mint succeeds", as
   expect(walletState.switchCalls).toBeGreaterThan(0);
   expect(walletState.currentChainId.toLowerCase()).toBe(requiredChainHex);
 });
-

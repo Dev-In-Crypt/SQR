@@ -97,7 +97,7 @@ describe("API integration - auth, history, and rate limiting", () => {
 
     let throttledResponse: { code?: string; message?: string } | null = null;
 
-    for (let i = 0; i < 6; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
       const response = await session.postJson<{
         analysisId?: string;
         error?: { code: string; message: string };
@@ -124,7 +124,7 @@ describe("API integration - auth, history, and rate limiting", () => {
 
     let throttledResponse: { code?: string; message?: string } | null = null;
 
-    for (let i = 0; i < 25; i += 1) {
+    for (let i = 0; i < 40; i += 1) {
       const response = await session.postJson<{
         analysisId?: string;
         error?: { code: string; message: string };
@@ -154,7 +154,7 @@ describe("API integration - auth, history, and rate limiting", () => {
 
     let seenThrottle = false;
 
-    for (let i = 0; i < 24; i += 1) {
+    for (let i = 0; i < 50; i += 1) {
       const session = i % 2 === 0 ? walletASession : walletBSession;
       const response = await session.postJson<{
         analysisId?: string;

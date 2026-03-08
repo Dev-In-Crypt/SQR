@@ -1,7 +1,7 @@
-﻿import { config } from "@/lib/config";
+import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
-import { generateExecutiveSummary } from "@/lib/llm";
-import type { Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
+import { generateAIAuditFindings, generateExecutiveSummary } from "@/lib/llm";
+import type { AIAuditFinding, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
 
 const severityRank: Record<Severity, number> = {
   CRITICAL: 5,
@@ -61,14 +61,25 @@ export async function buildReport(params: {
   scannerErrors: string[];
   partialReasons: string[];
   sourceBundle: SourceBundle;
+  aiAuditFindings?: AIAuditFinding[];
 }): Promise<{ report: ReportPayload; topSeverity: Severity }> {
   const mergedFindings = mergeFindings(params.findings);
   const sortedFindings = sortFindings(mergedFindings);
 
-  const executiveSummary = await generateExecutiveSummary({
+  const scannerSummary = await generateExecutiveSummary({
     findings: sortedFindings,
     partialReasons: params.partialReasons
   });
+
+  const aiAuditFindings =
+    params.aiAuditFindings ??
+    (await generateAIAuditFindings({
+      sourceBundle: params.sourceBundle,
+      scannerFindings: sortedFindings,
+      warnings: params.warnings,
+      scannerErrors: params.scannerErrors,
+      partialReasons: params.partialReasons
+    }));
 
   const metadata = {
     analyzerVersion: config.ANALYZER_VERSION,
@@ -81,9 +92,9 @@ export async function buildReport(params: {
   };
 
   // Keep generatedAt in the delivered metadata, but exclude it from reportHash so
-  // identical inputs produce identical hashes across runs.
+  // identical inputs produce identical hashes across runs. AI output is also
+  // excluded to keep deterministic scanner-hash semantics.
   const hashPayload = {
-    executiveSummary,
     findings: sortedFindings,
     metadata: {
       analyzerVersion: metadata.analyzerVersion,
@@ -102,8 +113,10 @@ export async function buildReport(params: {
 
   return {
     report: {
-      executiveSummary,
+      executiveSummary: scannerSummary,
+      scannerSummary,
       findings: sortedFindings,
+      aiAuditFindings,
       metadata,
       warnings: params.warnings,
       scannerErrors: params.scannerErrors,

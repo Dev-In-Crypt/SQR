@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 
 import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
+import { resolveSolcRuntimeForSource } from "@/lib/solc-resolver";
 import type { Finding, ScannerOutput, Severity, SourceBundle } from "@/lib/types";
 
 const DIAGNOSTIC_LIMIT = 3000;
@@ -382,48 +383,6 @@ function buildSlitherDiagnostics(params: {
   const compact = parts.join(" | ").replace(/\s+/g, " ");
   return truncateDiagnostic(compact);
 }
-interface SolcResolution {
-  command: string;
-  resolvedPath: string;
-  attemptedPath: string;
-  solcPathSet: boolean;
-  error?: string;
-}
-async function resolveSolcBinary(): Promise<SolcResolution> {
-  const configuredSolcPath = config.SOLC_PATH?.trim();
-  if (!configuredSolcPath) {
-    return {
-      command: "solc",
-      resolvedPath: "solc",
-      attemptedPath: "solc",
-      solcPathSet: false
-    };
-  }
-  if (!isAbsolute(configuredSolcPath)) {
-    return {
-      command: configuredSolcPath,
-      resolvedPath: configuredSolcPath,
-      attemptedPath: configuredSolcPath,
-      solcPathSet: true,
-      error: "SOLC_PATH must be an absolute path."
-    };
-  }
-  if (!(await pathExists(configuredSolcPath))) {
-    return {
-      command: configuredSolcPath,
-      resolvedPath: configuredSolcPath,
-      attemptedPath: configuredSolcPath,
-      solcPathSet: true,
-      error: "SOLC_PATH does not exist."
-    };
-  }
-  return {
-    command: configuredSolcPath,
-    resolvedPath: configuredSolcPath,
-    attemptedPath: configuredSolcPath,
-    solcPathSet: true
-  };
-}
 function pushSolcMissingWarnings(params: {
   warnings: string[];
   solcPathSet: boolean;
@@ -433,6 +392,25 @@ function pushSolcMissingWarnings(params: {
   params.warnings.push("SLITHER_SKIPPED_SOLC_MISSING");
   params.warnings.push(
     `SLITHER_SKIPPED_SOLC_MISSING_DETAIL: SOLC_PATH set=${String(params.solcPathSet)}; attempted=${params.attemptedPath}; reason=${params.reason}`
+  );
+}
+
+function pushSolcResolutionWarnings(params: {
+  warnings: string[];
+  requestedPragma: string | null;
+  filePath: string | null;
+  strategy: string;
+  reason: string;
+}): void {
+  params.warnings.push("SLITHER_SOLC_VERSION_UNRESOLVED");
+  params.warnings.push(
+    [
+      "SLITHER_SOLC_VERSION_UNRESOLVED_DETAIL:",
+      `pragma=${params.requestedPragma ?? "unknown"};`,
+      `file=${params.filePath ?? "unknown"};`,
+      `strategy=${params.strategy};`,
+      `reason=${params.reason}`
+    ].join(" ")
   );
 }
 
@@ -482,15 +460,30 @@ async function runSlither(params: {
   const plan = await createSlitherExecutionPlan(params.sourceBundle, params.runtimeMode);
 
   try {
-    let solcResolution: SolcResolution | null = null;
+    let solcResolution: Awaited<ReturnType<typeof resolveSolcRuntimeForSource>> | null = null;
     if (plan.standalone) {
-      solcResolution = await resolveSolcBinary();
-      if (solcResolution.error) {
+      solcResolution = await resolveSolcRuntimeForSource({
+        sourceBundle: params.sourceBundle,
+        cwd: plan.cwd,
+        runCommand: params.runtime.runCommand
+      });
+
+      if (solcResolution.unresolvedPragmaConstraint && solcResolution.failureReason) {
+        pushSolcResolutionWarnings({
+          warnings,
+          requestedPragma: solcResolution.requestedPragma,
+          filePath: solcResolution.requestedPragmaFilePath,
+          strategy: solcResolution.resolutionStrategy,
+          reason: solcResolution.failureReason
+        });
+      }
+
+      if (solcResolution.failureReason && solcResolution.resolutionStrategy !== "solc_select_unresolved") {
         pushSolcMissingWarnings({
           warnings,
           solcPathSet: solcResolution.solcPathSet,
           attemptedPath: solcResolution.attemptedPath,
-          reason: solcResolution.error
+          reason: solcResolution.failureReason
         });
         return {
           findings: [],
@@ -499,7 +492,8 @@ async function runSlither(params: {
         };
       }
       const solcResult = await params.runtime.runCommand(solcResolution.command, ["--version"], {
-        cwd: plan.cwd
+        cwd: plan.cwd,
+        env: solcResolution.commandEnv
       });
       if (solcResult.code !== 0) {
         const reason = buildSlitherDiagnostics({
@@ -539,15 +533,15 @@ async function runSlither(params: {
       plan.compileFramework
     ];
     if (plan.standalone && solcResolution) {
-      slitherArgs.push("--solc", solcResolution.resolvedPath);
+      slitherArgs.push("--solc", solcResolution.resolvedBinaryPath);
     }
 
     const slitherEnv =
       plan.standalone && solcResolution
         ? (() => {
             const currentPath = process.env.PATH ?? process.env.Path ?? "";
-            const solcDir = isAbsolute(solcResolution.resolvedPath)
-              ? dirname(solcResolution.resolvedPath)
+            const solcDir = isAbsolute(solcResolution.resolvedBinaryPath)
+              ? dirname(solcResolution.resolvedBinaryPath)
               : "";
             const mergedPath =
               solcDir && !currentPath.toLowerCase().includes(solcDir.toLowerCase())
@@ -556,9 +550,10 @@ async function runSlither(params: {
 
             return {
               ...process.env,
+              ...(solcResolution.commandEnv ?? {}),
               PATH: mergedPath,
               Path: mergedPath,
-              SOLC: solcResolution.resolvedPath
+              SOLC: solcResolution.resolvedBinaryPath
             };
           })()
         : undefined;
