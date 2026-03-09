@@ -5,11 +5,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=deployer
-Group=deployer
-WorkingDirectory=/var/www/solidityquickreview
+User=sqr
+Group=sqr
+WorkingDirectory=/opt/sqr/app
 EnvironmentFile=/etc/sqr/sqr.env
-ExecStart=/usr/local/bin/npm run worker
+ExecStart=/usr/bin/env npm run worker
 Restart=always
 RestartSec=5
 TimeoutStartSec=60

@@ -25,7 +25,7 @@ Required production values in `/etc/sqr/sqr.env`:
 
 - `NODE_ENV=production`
 - `APP_ENV=production`
-- `NEXT_PUBLIC_APP_URL=https://solidity-scan.com`
+- `NEXT_PUBLIC_APP_URL=https://<your-domain>`
 - `PRIVATE_LINK_SECRET` (non-default, >=32 chars)
 - `RECEIPT_CONTRACT_ADDRESS` and Base RPC values
 
@@ -58,23 +58,23 @@ journalctl -u sqr-worker -n 100 --no-pager
 ## 5) Nginx reverse proxy
 
 ```bash
-sudo cp deploy/nginx/solidity-scan.com.conf /etc/nginx/sites-available/solidity-scan.com
-sudo ln -s /etc/nginx/sites-available/solidity-scan.com /etc/nginx/sites-enabled/solidity-scan.com
+sudo cp deploy/nginx/site.conf.example /etc/nginx/sites-available/<your-domain>
+sudo ln -s /etc/nginx/sites-available/<your-domain> /etc/nginx/sites-enabled/<your-domain>
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
 ## 6) HTTPS (Let's Encrypt)
 
-Ensure DNS A records for `solidity-scan.com` (and `www` if needed) point to this VPS.
+Ensure DNS A records for `<your-domain>` (and `www` if needed) point to this VPS.
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d solidity-scan.com -d www.solidity-scan.com
+sudo certbot --nginx -d <your-domain> -d www.<your-domain>
 ```
 
 After certificate issuance, verify:
 
-- `NEXT_PUBLIC_APP_URL=https://solidity-scan.com`
-- Cloudflare SSL mode: `Full (strict)`
+- `NEXT_PUBLIC_APP_URL=https://<your-domain>`
+- If Cloudflare is used: SSL mode `Full (strict)`

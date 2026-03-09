@@ -1,7 +1,7 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name solidity-scan.com www.solidity-scan.com;
+    server_name example.com www.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
