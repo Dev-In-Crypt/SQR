@@ -4,7 +4,7 @@ import { config } from "@/lib/config";
 import { ApiError } from "@/lib/errors";
 import { logError, logInfo } from "@/lib/logger";
 
-const ANALYSIS_QUEUE = "analysis-jobs";
+const ANALYSIS_QUEUE = config.ANALYSIS_QUEUE_NAME;
 
 type AnalysisJobPayload = {
   analysisId: string;

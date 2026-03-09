@@ -156,6 +156,7 @@ forge coverage
 Requirements:
 - Docker running
 - `DATABASE_URL` reachable
+- `DATABASE_URL_DIRECT` reachable for Prisma schema operations (`db push`/migrations)
 - DB schema initialized (`npm run check:db`)
 - `anvil` and `forge` available in PATH
 
@@ -201,8 +202,10 @@ npm run test:all
 
 ### Local app runtime
 - `APP_ENV=local`
-- `DATABASE_URL`
+- `DATABASE_URL` (runtime connection; pooled URL is recommended on Neon)
+- `DATABASE_URL_DIRECT` (direct/unpooled URL for Prisma schema operations)
 - `REDIS_URL` (optional)
+- `ANALYSIS_QUEUE_NAME` (optional; defaults to `analysis-jobs`; set unique per environment if multiple workers share one Redis)
 - `BASE_RPC_URL` (fallback RPC for receipt prepare/confirm)
 - `BASE_MAINNET_RPC_URL` (preferred Base mainnet RPC for receipt reads and wallet add/switch)
 - `BASE_SEPOLIA_RPC_URL` (preferred Base Sepolia RPC for receipt reads and wallet add/switch)
@@ -225,7 +228,9 @@ npm run test:all
 ### Integration tests
 Set from shell or CI:
 - `DATABASE_URL` (or `INTEGRATION_DATABASE_URL`)
+- `DATABASE_URL_DIRECT` (or `INTEGRATION_DATABASE_URL_DIRECT`)
 - `REDIS_URL` (only for `--redis` lane)
+- `ANALYSIS_QUEUE_NAME` (optional override; integration harness auto-generates a per-run queue name)
 - Optional overrides:
   - `SQR_TEST_PORT`
   - `SQR_ANVIL_PORT`
@@ -235,6 +240,7 @@ Set from shell or CI:
 ### E2E tests
 Set from shell or CI:
 - `DATABASE_URL` (or `E2E_DATABASE_URL`)
+- `DATABASE_URL_DIRECT` (or `E2E_DATABASE_URL_DIRECT`)
 - Optional overrides:
   - `SQR_E2E_PORT`
   - `SQR_E2E_ANVIL_PORT`
@@ -244,6 +250,12 @@ Set from shell or CI:
 - Required processes: `web` + `worker`.
 - If `REDIS_URL` is configured and worker is down, analysis create now returns `503 WORKER_UNAVAILABLE` instead of accepting stuck queued jobs.
 - Readiness probe: `GET /api/v1/health` returns `200` only when analysis queue mode is ready (or inline mode is active).
+- If multiple deployments share the same Redis instance, set `ANALYSIS_QUEUE_NAME` per deployment to avoid cross-environment job consumption.
+
+Example values:
+- local: `ANALYSIS_QUEUE_NAME=analysis-jobs-local`
+- staging: `ANALYSIS_QUEUE_NAME=analysis-jobs-staging`
+- production: `ANALYSIS_QUEUE_NAME=analysis-jobs-prod`
 
 ## Environments: local vs staging vs production
 - `local`: developer and CI test runs, local Anvil for chain tests.
@@ -372,5 +384,3 @@ npm run security:slither:triage
 - Private link token is stored hashed in DB (`privateTokenHash`).
 - Production address analysis enforces Base mainnet chainId 8453.
 - Receipt owner semantics are signature-bound in v0.2.0; pre-v0.2.0 registries should be treated as deprecated for ownership claims.
-
-

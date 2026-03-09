@@ -64,8 +64,12 @@ export default async function integrationGlobalSetup() {
     throw new Error("DATABASE_URL (or INTEGRATION_DATABASE_URL) is required for integration tests");
   }
 
+  const baseDirectDatabaseUrl =
+    process.env.INTEGRATION_DATABASE_URL_DIRECT || process.env.DATABASE_URL_DIRECT || baseDatabaseUrl;
+
   const schema = `itest_${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
   const testDatabaseUrl = withSchema(baseDatabaseUrl, schema);
+  const testDirectDatabaseUrl = withSchema(baseDirectDatabaseUrl, schema);
 
   const anvilPort = await resolvePort({
     envName: "SQR_ANVIL_PORT",
@@ -101,7 +105,7 @@ export default async function integrationGlobalSetup() {
       await stopProcessTree(nextProcess, "integration:next");
       await stopProcessTree(anvilProcess, "integration:anvil");
 
-      const adminDatabaseUrl = withSchema(baseDatabaseUrl, "public");
+      const adminDatabaseUrl = withSchema(baseDirectDatabaseUrl, "public");
       const prisma = new PrismaClient({
         datasources: {
           db: {
@@ -140,7 +144,8 @@ export default async function integrationGlobalSetup() {
       cwd: ROOT,
       env: {
         ...process.env,
-        DATABASE_URL: testDatabaseUrl
+        DATABASE_URL: testDatabaseUrl,
+        DATABASE_URL_DIRECT: testDirectDatabaseUrl
       }
     });
 
@@ -201,6 +206,7 @@ export default async function integrationGlobalSetup() {
       APP_ENV: "local",
       NEXT_PUBLIC_APP_URL: baseUrl,
       DATABASE_URL: testDatabaseUrl,
+      DATABASE_URL_DIRECT: testDirectDatabaseUrl,
       BASE_CHAIN_ID: "8453",
       STAGING_BASE_CHAIN_ID: "84532",
       BASE_RPC_URL: rpcUrl,
@@ -213,6 +219,7 @@ export default async function integrationGlobalSetup() {
       SQR_TEST_BASESCAN_TOTAL_TIMEOUT_MS: "1500",
       OPENAI_API_KEY: "",
       REDIS_URL: redisUrl || "",
+      ANALYSIS_QUEUE_NAME: `analysis-jobs-${schema}`,
       SQR_NEXT_DIST_DIR: runScopedDistDir,
       SQR_NEXT_TSCONFIG: runScopedTsconfig
     };
@@ -259,6 +266,4 @@ export default async function integrationGlobalSetup() {
     throw error;
   }
 }
-
-
 

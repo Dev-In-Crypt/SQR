@@ -1,4 +1,5 @@
-﻿import { Prisma, Severity } from "@prisma/client";
+import { Prisma, Severity } from "@prisma/client";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
@@ -65,17 +66,62 @@ function normalizeFinding(finding: Finding): Finding {
   };
 }
 
-export async function processAnalysisById(analysisId: string): Promise<void> {
-  const analysis = await prisma.analysisRequest.findUnique({
-    where: { id: analysisId },
+async function loadAnalysisForProcessing(
+  analysisId: string,
+  retries = 60,
+  retryDelayMs = 500
+) {
+  type AnalysisForProcessing = Prisma.AnalysisRequestGetPayload<{
     include: {
-      sourceBundle: true,
-      report: true
+      sourceBundle: true;
+      report: true;
+    };
+  }>;
+
+  let lastSeen:
+    | AnalysisForProcessing
+    | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const analysis = await prisma.analysisRequest.findUnique({
+      where: { id: analysisId },
+      include: {
+        sourceBundle: true,
+        report: true
+      }
+    });
+
+    lastSeen = analysis;
+
+    if (!analysis) {
+      if (attempt < retries) {
+        await delay(retryDelayMs);
+        continue;
+      }
+      return null;
     }
-  });
+
+    if (
+      analysis.report ||
+      analysis.sourceBundle ||
+      (analysis.status === "FAILED" && analysis.errorCode === "SOURCE_UNVERIFIED")
+    ) {
+      return analysis;
+    }
+
+    if (attempt < retries) {
+      await delay(retryDelayMs);
+    }
+  }
+
+  return lastSeen;
+}
+
+export async function processAnalysisById(analysisId: string): Promise<void> {
+  const analysis = await loadAnalysisForProcessing(analysisId);
 
   if (!analysis) {
-    return;
+    throw new Error(`Analysis request not found: ${analysisId}`);
   }
 
   if (analysis.report) {
