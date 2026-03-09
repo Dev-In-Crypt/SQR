@@ -40,6 +40,7 @@ export interface ScannerRuntime {
     options: {
       cwd: string;
       env?: NodeJS.ProcessEnv;
+      timeoutMs?: number;
     }
   ): Promise<CommandResult>;
 }
@@ -86,14 +87,35 @@ const defaultScannerRuntime: ScannerRuntime = {
       let stderr = "";
       let errorMessage: string | undefined;
       let settled = false;
+      let timeoutHandle: NodeJS.Timeout | null = null;
+
+      const clearTimer = () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+      };
 
       const finish = (result: CommandResult) => {
         if (settled) {
           return;
         }
         settled = true;
+        clearTimer();
         resolvePromise(result);
       };
+
+      if (options.timeoutMs && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0) {
+        timeoutHandle = setTimeout(() => {
+          errorMessage = `COMMAND_TIMEOUT_${options.timeoutMs}MS`;
+          child.kill("SIGTERM");
+          setTimeout(() => {
+            if (!settled) {
+              child.kill("SIGKILL");
+            }
+          }, 500).unref();
+        }, options.timeoutMs).unref();
+      }
 
       child.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString();
@@ -493,7 +515,8 @@ async function runSlither(params: {
       }
       const solcResult = await params.runtime.runCommand(solcResolution.command, ["--version"], {
         cwd: plan.cwd,
-        env: solcResolution.commandEnv
+        env: solcResolution.commandEnv,
+        timeoutMs: Math.min(config.SCANNER_TIMEOUT_MS, 15000)
       });
       if (solcResult.code !== 0) {
         const reason = buildSlitherDiagnostics({
@@ -559,7 +582,8 @@ async function runSlither(params: {
         : undefined;
     const commandResult = await params.runtime.runCommand("slither", slitherArgs, {
       cwd: plan.cwd,
-      env: slitherEnv
+      env: slitherEnv,
+      timeoutMs: config.SCANNER_TIMEOUT_MS
     });
     const { parsed, parseError } = await readSlitherOutput(outputPath);
 

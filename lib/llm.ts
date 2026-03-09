@@ -177,7 +177,8 @@ export async function generateExecutiveSummary(params: {
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.OPENAI_EXEC_SUMMARY_TIMEOUT_MS)
     });
 
     if (!response.ok) {
@@ -312,7 +313,8 @@ export async function generateAIAuditFindings(params: {
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.OPENAI_AUDIT_TIMEOUT_MS)
     });
 
     if (!response.ok) {

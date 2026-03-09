@@ -106,6 +106,13 @@ Main components:
 
 Typical production topology is VPS-based with separate web/API and worker processes.
 
+Recommended process management is native `systemd` with two units:
+
+- `sqr-web.service`
+- `sqr-worker.service`
+
+Reference setup is provided in `deploy/systemd/` with an operations guide in `docs/operations/systemd-vps.md`.
+
 Run-time services:
 
 - API/web service
@@ -131,6 +138,7 @@ Environment configuration is organized by category:
 - rpc/chain
 - AI models
 - feature flags
+- timeout controls
 - secrets
 
 Use `.env.example` as the baseline and configure values for local, staging, or production runtime.

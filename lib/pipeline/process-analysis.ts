@@ -1,6 +1,7 @@
 import { Prisma, Severity } from "@prisma/client";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { config } from "@/lib/config";
 import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
@@ -8,6 +9,28 @@ import { logError, logInfo } from "@/lib/logger";
 import { cachePrivateToken } from "@/lib/request-context";
 import { runStaticScan } from "@/lib/scanner";
 import type { AnalysisStatus, Finding, SnippetCompleteness, SourceBundle } from "@/lib/types";
+
+class AnalysisTimeoutError extends Error {
+  public readonly stage: string;
+
+  constructor(stage: string, timeoutMs: number) {
+    super(`${stage} exceeded timeout budget (${timeoutMs}ms)`);
+    this.name = "AnalysisTimeoutError";
+    this.stage = stage;
+  }
+}
+
+function assertWithinTotalTimeout(startedAt: number, stage: string): void {
+  if (Date.now() - startedAt > config.ANALYSIS_TOTAL_TIMEOUT_MS) {
+    throw new AnalysisTimeoutError(stage, config.ANALYSIS_TOTAL_TIMEOUT_MS);
+  }
+}
+
+function hasTimeoutDiagnostic(diagnostics: string[]): boolean {
+  return diagnostics.some((item) =>
+    item.includes("COMMAND_TIMEOUT_") || item.includes("BASESCAN_TIMEOUT") || item.includes("TIMEOUT")
+  );
+}
 
 function asSourceBundle(value: unknown): SourceBundle {
   const bundle = value as SourceBundle;
@@ -152,6 +175,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
   });
 
   try {
+    const startedAt = Date.now();
     const sourceBundle = asSourceBundle(analysis.sourceBundle.sourceJson);
     const sourceMeta = (analysis.sourceBundle.sourceMetaJson ?? {}) as Record<string, unknown>;
     const snippetCompleteness = readSnippetCompleteness(sourceMeta.snippetCompleteness);
@@ -167,11 +191,19 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       snippetCompleteness.isComplete === false;
 
     const isSnippetInput = sourceBundle.inputType === "PASTE_CODE";
+    assertWithinTotalTimeout(startedAt, "pre_scanner");
+
     const staticScan = await runStaticScan(sourceBundle, {
       skipSlither: isSnippetIncomplete,
       scanMode: isSnippetInput ? "snippet" : "project",
       slitherRequired: !isSnippetInput
     });
+
+    if (hasTimeoutDiagnostic(staticScan.scannerErrors) || hasTimeoutDiagnostic(staticScan.warnings)) {
+      throw new AnalysisTimeoutError("scanner_stage", config.SCANNER_TIMEOUT_MS);
+    }
+
+    assertWithinTotalTimeout(startedAt, "post_scanner");
 
     const warnings = [...pasteWarnings, ...sourceWarnings, ...staticScan.warnings];
     const partialReasons: string[] = [];
@@ -189,6 +221,8 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           ? "DONE_WITH_WARNINGS"
           : "COMPLETED";
 
+    assertWithinTotalTimeout(startedAt, "pre_report_generation");
+
     const { report, topSeverity } = await buildReport({
       findings: normalizedFindings,
       warnings,
@@ -196,6 +230,8 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       partialReasons,
       sourceBundle
     });
+
+    assertWithinTotalTimeout(startedAt, "post_report_generation");
 
     const privateToken = randomToken();
     const privateTokenHash = hashPrivateToken(privateToken);
@@ -243,6 +279,8 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       });
     });
 
+    assertWithinTotalTimeout(startedAt, "post_persistence");
+
     await cachePrivateToken(analysis.id, privateToken).catch(() => undefined);
 
     logInfo("Analysis processed", {
@@ -252,16 +290,20 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
       status: finalStatus
     });
   } catch (error) {
+    const errorCode = error instanceof AnalysisTimeoutError ? "ANALYSIS_TIMEOUT" : "ANALYSIS_PROCESSING_FAILED";
+
     logError("Analysis processing failed", {
       analysisId: analysis.id,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
+      errorCode,
+      timeoutStage: error instanceof AnalysisTimeoutError ? error.stage : undefined
     });
 
     await prisma.analysisRequest.update({
       where: { id: analysis.id },
       data: {
         status: "FAILED",
-        errorCode: "ANALYSIS_PROCESSING_FAILED"
+        errorCode
       }
     });
   }
