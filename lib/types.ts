@@ -86,8 +86,11 @@ export interface StructuredPragmaMeta {
 }
 
 export interface StructuredRoleOrPrivilege {
+  contractName: string;
   name: string;
   kind: "state_var" | "modifier" | "guard";
+  sourceFunction: string | null;
+  matchedExpression: string | null;
   filePath: string;
   line: number;
 }
@@ -95,7 +98,34 @@ export interface StructuredRoleOrPrivilege {
 export interface StructuredStateVariable {
   contractName: string;
   name: string;
+  type: string;
   declaration: string;
+  isMapping: boolean;
+  isArray: boolean;
+  isRoleLike: boolean;
+  isFlagLike: boolean;
+  isCounterLike: boolean;
+  isTotalLike: boolean;
+  isMilestoneLike: boolean;
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredModifier {
+  contractName: string;
+  name: string;
+  filePath: string;
+  line: number;
+  guardExpressions: string[];
+  roleHints: string[];
+}
+
+export interface StructuredAuthorizationGuard {
+  contractName: string;
+  functionName: string;
+  source: "require" | "modifier";
+  expression: string;
+  roleHints: string[];
   filePath: string;
   line: number;
 }
@@ -123,6 +153,17 @@ export interface StructuredStateMutatingFunction {
   functionName: string;
   visibility: string;
   mutability: string;
+  modifiers: string[];
+  guardConditions: string[];
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredValueTransferFunction {
+  contractName: string;
+  functionName: string;
+  transferKinds: string[];
+  transferSites: string[];
   filePath: string;
   line: number;
 }
@@ -135,25 +176,86 @@ export interface StructuredLoopLocation {
   line: number;
 }
 
+export interface StructuredStateFlowGate {
+  contractName: string;
+  variableName: string;
+  gatedFunctions: string[];
+  conditions: string[];
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredProgressionIndicator {
+  contractName: string;
+  variableName: string;
+  declaration: string;
+  updatedInFunctions: string[];
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredCounterOrTotal {
+  contractName: string;
+  variableName: string;
+  declaration: string;
+  kind: "counter" | "total";
+  updatedInFunctions: string[];
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredMappingTracker {
+  contractName: string;
+  variableName: string;
+  declaration: string;
+  valueType: string;
+  updatedInFunctions: string[];
+  filePath: string;
+  line: number;
+}
+
+export interface StructuredFundControlFunction {
+  contractName: string;
+  functionName: string;
+  action: "payout" | "refund" | "cancel" | "withdrawal";
+  callableBy: string[];
+  guardConditions: string[];
+  transferMethods: string[];
+  usesPlannedValues: boolean;
+  usesBalanceChecks: boolean;
+  usesLoops: boolean;
+  filePath: string;
+  line: number;
+}
+
 export interface StructuredFundControlMap {
   payoutFunctions: string[];
   refundFunctions: string[];
   cancellationFunctions: string[];
   withdrawalFunctions: string[];
   privilegedRoles: string[];
+  functionControls: StructuredFundControlFunction[];
   notes: string[];
 }
 
 export interface StructuredAuditContext {
   pragma: StructuredPragmaMeta;
   contractNames: string[];
+  modifiers: StructuredModifier[];
   rolesOrPrivilegedAddresses: StructuredRoleOrPrivilege[];
+  authorizationGuards: StructuredAuthorizationGuard[];
   stateVariables: StructuredStateVariable[];
   externalCallSites: StructuredCallSite[];
   tokenInteractionSites: StructuredTokenInteractionSite[];
   stateMutatingFunctions: StructuredStateMutatingFunction[];
+  valueTransferFunctions: StructuredValueTransferFunction[];
   loopLocations: StructuredLoopLocation[];
+  stateFlowGates: StructuredStateFlowGate[];
+  progressionIndicators: StructuredProgressionIndicator[];
+  countersAndTotals: StructuredCounterOrTotal[];
+  mappingTrackers: StructuredMappingTracker[];
   fundControlMap: StructuredFundControlMap;
+  logicSummaries: string[];
 }
 
 export interface SnippetCompleteness {

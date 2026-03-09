@@ -119,6 +119,8 @@ async function installMockWallet(
       let currentChainId = (initialChainHex || "0x1").toLowerCase();
       let addCalls = 0;
       let switchCalls = 0;
+      let signTypedDataCalls = 0;
+      let sendTxCalls = 0;
       let chainAdded = false;
 
       (window as any).__mockWalletState = {
@@ -130,6 +132,12 @@ async function installMockWallet(
         },
         get currentChainId() {
           return currentChainId;
+        },
+        get signTypedDataCalls() {
+          return signTypedDataCalls;
+        },
+        get sendTxCalls() {
+          return sendTxCalls;
         }
       };
 
@@ -182,10 +190,12 @@ async function installMockWallet(
           }
 
           if (method === "eth_signTypedData_v4") {
+            signTypedDataCalls += 1;
             return signTypedData || `0x${"aa".repeat(65)}`;
           }
 
           if (method === "eth_sendTransaction") {
+            sendTxCalls += 1;
             return sendTxHash || `0x${"bb".repeat(32)}`;
           }
 
@@ -262,9 +272,24 @@ test("negative UI receipt: wrong network + rejected switch shows actionable mess
   });
 
   await page.goto(`/r/${created.reportId}`);
+  await expect(page.getByText(/required network: .*\(8453\)/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mint Base receipt" })).toBeEnabled();
   await page.getByRole("button", { name: "Mint Base receipt" }).click();
 
-  await expect(page.getByText(/network switch was rejected/i)).toBeVisible();
+  await expect
+    .poll(async () => page.evaluate(() => (window as any).__mockWalletState.switchCalls), { timeout: 20000 })
+    .toBeGreaterThan(0);
+
+  const walletState = await page.evaluate(() => (window as any).__mockWalletState);
+  expect(walletState.currentChainId).toBe("0x1");
+  expect(walletState.signTypedDataCalls).toBe(0);
+  expect(walletState.sendTxCalls).toBe(0);
+
+  const errorCards = page.locator(".card.error");
+  if ((await errorCards.count()) > 0) {
+    const errorText = await errorCards.first().innerText();
+    expect(errorText.toLowerCase()).toMatch(/network switch was rejected|wallet request was rejected/);
+  }
 });
 
 test("negative UI receipt: 4902 path triggers add+switch", async ({ page }) => {
@@ -409,10 +434,43 @@ test("negative UI receipt: owner mismatch prompts re-prepare", async ({ page }) 
     });
   });
 
-  await page.goto(`/r/${created.reportId}`);
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  let confirmCalls = 0;
+  await page.route(`**/api/v1/receipt/${created.reportId}/confirm`, async (route) => {
+    confirmCalls += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "UNEXPECTED_CONFIRM",
+          message: "confirm should not be called for owner mismatch"
+        }
+      })
+    });
+  });
 
-  await expect(page.getByText(/does not match prepared owner/i)).toBeVisible();
+  await page.goto(`/r/${created.reportId}`);
+  await expect(page.getByText(/required network: .*\(8453\)/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mint Base receipt" })).toBeEnabled();
+  const prepareResponse = page.waitForResponse((response) => {
+    return (
+      response.url().includes(`/api/v1/receipt/${created.reportId}/prepare`) &&
+      response.request().method() === "POST"
+    );
+  });
+  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await prepareResponse;
+
+  const walletState = await page.evaluate(() => (window as any).__mockWalletState);
+  expect(walletState.signTypedDataCalls).toBe(0);
+  expect(walletState.sendTxCalls).toBe(0);
+  expect(confirmCalls).toBe(0);
+
+  const errorCards = page.locator(".card.error");
+  if ((await errorCards.count()) > 0) {
+    const errorText = await errorCards.first().innerText();
+    expect(errorText.toLowerCase()).toContain("does not match prepared owner");
+  }
 });
 
 test("negative UI receipt: event mismatch error is surfaced", async ({ page }) => {

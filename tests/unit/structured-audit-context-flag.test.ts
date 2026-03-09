@@ -122,12 +122,22 @@ describe("structured audit context flag", () => {
       input?: {
         structuredAuditContext?: {
           contractNames?: string[];
+          extractionSignals?: {
+            fundControlFunctionCount?: number;
+          };
+          keyFundControlFunctions?: Array<{ functionName: string }>;
         };
       };
     };
 
     expect(userPayload.input?.structuredAuditContext).toBeTruthy();
     expect(userPayload.input?.structuredAuditContext?.contractNames).toContain("Vault");
+    expect(userPayload.input?.structuredAuditContext?.extractionSignals?.fundControlFunctionCount).toBeGreaterThan(0);
+    expect(
+      userPayload.input?.structuredAuditContext?.keyFundControlFunctions?.some(
+        (entry) => entry.functionName === "payout"
+      )
+    ).toBe(true);
   });
 
   it("extraction failure falls back cleanly to legacy AI audit payload", async () => {

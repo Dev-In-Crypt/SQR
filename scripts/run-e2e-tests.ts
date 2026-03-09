@@ -77,9 +77,12 @@ async function main() {
     process.env.E2E_DATABASE_URL ||
     process.env.DATABASE_URL ||
     "postgresql://postgres:postgres@localhost:5432/solidity_quick_review?schema=public";
+  const baseDirectDatabaseUrl =
+    process.env.E2E_DATABASE_URL_DIRECT || process.env.DATABASE_URL_DIRECT || baseDatabaseUrl;
 
   const schema = `e2e_${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 8)}`;
   const testDatabaseUrl = withSchema(baseDatabaseUrl, schema);
+  const testDirectDatabaseUrl = withSchema(baseDirectDatabaseUrl, schema);
 
   const appPort = await resolvePort({
     envName: "SQR_E2E_PORT",
@@ -105,7 +108,7 @@ async function main() {
       await stopProcessTree(appProcess, "e2e:next");
       await stopProcessTree(anvilProcess, "e2e:anvil");
 
-      const adminDbUrl = withSchema(baseDatabaseUrl, "public");
+      const adminDbUrl = withSchema(baseDirectDatabaseUrl, "public");
       const prisma = new PrismaClient({
         datasources: {
           db: {
@@ -146,7 +149,8 @@ async function main() {
       cwd: ROOT,
       env: {
         ...process.env,
-        DATABASE_URL: testDatabaseUrl
+        DATABASE_URL: testDatabaseUrl,
+        DATABASE_URL_DIRECT: testDirectDatabaseUrl
       }
     });
 
@@ -204,6 +208,7 @@ async function main() {
       APP_ENV: "local",
       NEXT_PUBLIC_APP_URL: baseUrl,
       DATABASE_URL: testDatabaseUrl,
+      DATABASE_URL_DIRECT: testDirectDatabaseUrl,
       BASE_CHAIN_ID: "8453",
       STAGING_BASE_CHAIN_ID: "84532",
       BASE_RPC_URL: rpcUrl,
@@ -230,6 +235,7 @@ async function main() {
     const playwrightEnv: NodeJS.ProcessEnv = {
       ...process.env,
       DATABASE_URL: testDatabaseUrl,
+      DATABASE_URL_DIRECT: testDirectDatabaseUrl,
       SQR_E2E_BASE_URL: baseUrl,
       SQR_TEST_RPC_URL: rpcUrl,
       SQR_TEST_CHAIN_ID: "8453",
@@ -248,6 +254,5 @@ main().catch(async (error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
 
 

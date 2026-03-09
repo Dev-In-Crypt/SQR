@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { AIAuditFinding, Finding, SourceBundle } from "@/lib/types";
+import type { AIAuditFinding, Finding, SourceBundle, StructuredAuditContext } from "@/lib/types";
 import * as contractStructure from "@/lib/contract-structure";
 import { filterAIAuditFindings } from "@/lib/ai-audit-post-filter";
 import { config } from "@/lib/config";
@@ -94,6 +94,50 @@ function toAIAuditFindings(payload: unknown): AIAuditFinding[] {
   }));
 }
 
+function summarizeStructuredAuditContext(context: StructuredAuditContext): {
+  extractionSignals: {
+    contractCount: number;
+    roleCount: number;
+    guardCount: number;
+    mutatingFunctionCount: number;
+    valueTransferFunctionCount: number;
+    fundControlFunctionCount: number;
+  };
+  keyFundControlFunctions: Array<{
+    contractName: string;
+    functionName: string;
+    action: string;
+    callableBy: string[];
+    guardConditions: string[];
+    transferMethods: string[];
+    usesPlannedValues: boolean;
+    usesBalanceChecks: boolean;
+    usesLoops: boolean;
+  }>;
+} {
+  return {
+    extractionSignals: {
+      contractCount: context.contractNames.length,
+      roleCount: context.rolesOrPrivilegedAddresses.length,
+      guardCount: context.authorizationGuards.length,
+      mutatingFunctionCount: context.stateMutatingFunctions.length,
+      valueTransferFunctionCount: context.valueTransferFunctions.length,
+      fundControlFunctionCount: context.fundControlMap.functionControls.length
+    },
+    keyFundControlFunctions: context.fundControlMap.functionControls.map((entry) => ({
+      contractName: entry.contractName,
+      functionName: entry.functionName,
+      action: entry.action,
+      callableBy: entry.callableBy,
+      guardConditions: entry.guardConditions,
+      transferMethods: entry.transferMethods,
+      usesPlannedValues: entry.usesPlannedValues,
+      usesBalanceChecks: entry.usesBalanceChecks,
+      usesLoops: entry.usesLoops
+    }))
+  };
+}
+
 export async function generateExecutiveSummary(params: {
   findings: Finding[];
   partialReasons: string[];
@@ -177,7 +221,7 @@ export async function generateAIAuditFindings(params: {
     path: file.path,
     content: file.content
   }));
-  let structuredAuditContext: unknown;
+  let structuredAuditContext: StructuredAuditContext | undefined;
 
   if (config.structuredAuditContextEnabled) {
     try {
@@ -221,7 +265,10 @@ export async function generateAIAuditFindings(params: {
   };
 
   if (structuredAuditContext) {
-    inputPayload.structuredAuditContext = structuredAuditContext;
+    inputPayload.structuredAuditContext = {
+      ...structuredAuditContext,
+      ...summarizeStructuredAuditContext(structuredAuditContext)
+    };
   }
 
   const payload = {
