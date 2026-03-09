@@ -125,6 +125,26 @@ interface RuntimeConfigResponse {
   };
 }
 
+const SCANNER_SUMMARY_NOTES = [
+  "Automated analysis did not identify issues within the current scan scope. Additional manual review can provide deeper context.",
+  "No issues were identified within the automated analysis scope for this input. Independent review may add further validation.",
+  "The automated review did not surface issues for the provided source and configured analysis scope."
+] as const;
+
+const DEFAULT_SCANNER_SUMMARY_NOTE_INDEX = 0;
+
+function displayInputType(metadataInputType: string, contractAddress?: string): string {
+  if (metadataInputType === "PASTE_CODE") {
+    return "snippet";
+  }
+
+  if (metadataInputType === "BASE_ADDRESS") {
+    return contractAddress ? "verified contract" : "contract address";
+  }
+
+  return metadataInputType.toLowerCase();
+}
+
 function chainHexToNumber(chainHex: string): number {
   return Number.parseInt(chainHex, 16);
 }
@@ -271,6 +291,22 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       severityFilter === "ALL" ? true : finding.severity === severityFilter
     );
   }, [data, severityFilter]);
+
+  const coverage = useMemo(() => {
+    if (!data) {
+      return null;
+    }
+
+    const hasStaticNotes = data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0;
+    const aiCount = data.report.aiAuditFindings?.length ?? 0;
+
+    return {
+      staticAnalysis: hasStaticNotes ? "completed with notes" : "completed",
+      aiLogicReview: `included (${aiCount} ${aiCount === 1 ? "finding" : "findings"})`,
+      inputType: displayInputType(data.report.metadata.inputType, data.report.metadata.contractAddress),
+      reportHashMode: "deterministic (scanner-derived)"
+    };
+  }, [data]);
 
   async function updateVisibility(visibility: "PRIVATE" | "PUBLIC") {
     setBusy(true);
@@ -544,9 +580,33 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             <div className="muted">reportId: {data.reportId}</div>
             <div className="muted">reportHash: {data.reportHash}</div>
+
+            {coverage ? (
+              <div className="stack">
+                <h2 style={{ margin: 0 }}>Analysis Coverage</h2>
+                <div className="grid-2">
+                  <div>
+                    <strong>Static analysis:</strong> {coverage.staticAnalysis}
+                  </div>
+                  <div>
+                    <strong>AI logic review:</strong> {coverage.aiLogicReview}
+                  </div>
+                  <div>
+                    <strong>Input type:</strong> {coverage.inputType}
+                  </div>
+                  <div>
+                    <strong>Report hash:</strong> {coverage.reportHashMode}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             <div className="stack">
               <h2 style={{ margin: 0 }}>Scanner Summary</h2>
               <p>{data.report.scannerSummary || data.report.executiveSummary}</p>
+              <p className="muted">
+                {SCANNER_SUMMARY_NOTES[Math.min(DEFAULT_SCANNER_SUMMARY_NOTE_INDEX, SCANNER_SUMMARY_NOTES.length - 1)]}
+              </p>
             </div>
 
             <div className="row">

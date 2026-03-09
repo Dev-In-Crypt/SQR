@@ -28,6 +28,8 @@ async function createReportViaUi(page: import("@playwright/test").Page): Promise
   await page.getByRole("button", { name: "Analyze" }).click();
 
   await expect(page).toHaveURL(/\/analysis\//);
+  await expect(page.getByRole("heading", { name: "Progress" })).toBeVisible();
+  await expect(page.getByText(/Preparing source|Running static scanner/i)).toBeVisible();
   const analysisId = new URL(page.url()).pathname.split("/")[2] || "";
   expect(analysisId).not.toBe("");
 
@@ -66,6 +68,8 @@ async function createReportViaUi(page: import("@playwright/test").Page): Promise
   await page.goto(reportUrl);
   await expect(page).toHaveURL(/\/r\//);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Analysis Coverage" })).toBeVisible();
+  await expect(page.getByText(/Automated analysis did not identify issues within the current scan scope/i)).toBeVisible();
 
   const url = new URL(page.url());
   const reportIdFromUrl = url.pathname.split("/")[2] || "";
