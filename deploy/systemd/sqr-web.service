@@ -2,15 +2,17 @@
 Description=Solidity Quick Review Web
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=sqr
-Group=sqr
-WorkingDirectory=/opt/sqr/app
+User=deployer
+Group=deployer
+WorkingDirectory=/var/www/solidityquickreview
 EnvironmentFile=/etc/sqr/sqr.env
-ExecStart=/usr/bin/env npm run start -- --hostname 127.0.0.1 --port 3000
-Restart=always
+ExecStart=/usr/local/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=on-failure
 RestartSec=5
 TimeoutStartSec=60
 TimeoutStopSec=30
