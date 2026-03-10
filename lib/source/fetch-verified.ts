@@ -388,7 +388,24 @@ async function fetchFromSourcify(chainId: number, address: string): Promise<Veri
   const base = `${config.SOURCIFY_API_URL}/${chainId}/${address}`;
   const metadataUrl = `${base}/metadata.json`;
 
-  const metadataResp = await fetch(metadataUrl, { cache: "no-store" });
+  let metadataResp: Response;
+  try {
+    metadataResp = await fetch(metadataUrl, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(config.SOURCE_FETCH_TIMEOUT_MS)
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return {
+        verified: false,
+        files: [],
+        metadata: { sourceProvider: "sourcify", url: metadataUrl },
+        reason: "SOURCIFY_TIMEOUT"
+      };
+    }
+    throw error;
+  }
+
   if (!metadataResp.ok) {
     return {
       verified: false,
@@ -416,7 +433,26 @@ async function fetchFromSourcify(chainId: number, address: string): Promise<Veri
   const files: SourceFile[] = [];
 
   for (const sourcePath of sourcePaths) {
-    const sourceResp = await fetch(`${base}/sources/${sourcePath}`, { cache: "no-store" });
+    const sourceUrl = `${base}/sources/${sourcePath}`;
+    let sourceResp: Response;
+
+    try {
+      sourceResp = await fetch(sourceUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(config.SOURCE_FETCH_TIMEOUT_MS)
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        return {
+          verified: false,
+          files: [],
+          metadata: { sourceProvider: "sourcify", url: sourceUrl },
+          reason: "SOURCIFY_TIMEOUT"
+        };
+      }
+      throw error;
+    }
+
     if (!sourceResp.ok) {
       continue;
     }

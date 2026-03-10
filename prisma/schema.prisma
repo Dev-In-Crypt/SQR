@@ -22,6 +22,14 @@ enum AnalysisStatus {
   PARTIAL
 }
 
+enum PipelineStage {
+  PREPARING_SOURCE
+  RUNNING_STATIC_SCANNER
+  EXTRACTING_CONTRACT_STRUCTURE
+  RUNNING_AI_AUDIT
+  GENERATING_REPORT
+}
+
 enum Visibility {
   PRIVATE
   PUBLIC
@@ -67,6 +75,7 @@ model AnalysisRequest {
   inputHash          String
   sourceHash         String?
   status             AnalysisStatus @default(QUEUED)
+  pipelineStage      PipelineStage?
   errorCode          String?
   requesterUserId    String?
   requesterUser      User?          @relation(fields: [requesterUserId], references: [id], onDelete: SetNull)
@@ -181,7 +190,6 @@ model RateLimitSnapshot {
   @@index([date, wallet])
   @@map("rate_limits")
 }
-
 
 
 

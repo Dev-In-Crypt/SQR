@@ -17,6 +17,20 @@ describe("analysis error message mapping", () => {
     expect(details.category).toBe("SOURCE_RETRIEVAL_ERROR");
   });
 
+  it("maps dynamic provider http codes to source retrieval error", () => {
+    const details = resolveAnalysisErrorDetails("SOURCIFY_HTTP_504");
+
+    expect(details.title).toBe("Source retrieval error");
+    expect(details.category).toBe("SOURCE_RETRIEVAL_ERROR");
+  });
+
+  it("maps compilation_failed to compilation failure", () => {
+    const details = resolveAnalysisErrorDetails("COMPILATION_FAILED");
+
+    expect(details.title).toBe("Compilation failure");
+    expect(details.category).toBe("COMPILATION_FAILURE");
+  });
+
   it("maps timeout-like codes to analysis timeout", () => {
     const details = resolveAnalysisErrorDetails("ANALYSIS_TIMEOUT");
 

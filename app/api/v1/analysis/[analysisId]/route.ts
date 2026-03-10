@@ -46,6 +46,7 @@ export async function GET(
     return ok({
       analysisId: analysis.id,
       status: analysis.status,
+      pipelineStage: analysis.pipelineStage,
       reportId: analysis.report?.id ?? null,
       errorCode: analysis.errorCode,
       privateToken

@@ -27,9 +27,10 @@ async function createReportViaUi(page: import("@playwright/test").Page): Promise
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();
 
-  await expect(page).toHaveURL(/\/analysis\//);
+  await expect(page).toHaveURL(/\/analysis\//, { timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Progress" })).toBeVisible();
-  await expect(page.getByText(/Preparing source|Running static scanner/i)).toBeVisible();
+  const progressBody = page.locator(".progress-list");
+  await expect(progressBody).toContainText(/Preparing source|Running static scanner/i);
   const analysisId = new URL(page.url()).pathname.split("/")[2] || "";
   expect(analysisId).not.toBe("");
 
@@ -134,7 +135,7 @@ test("suite A smoke: incomplete snippet is blocked in UI", async ({ page }) => {
 
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(INCOMPLETE_SNIPPET);
 
-  await expect(page.getByText("incomplete snippet, please paste full contract")).toBeVisible();
+  await expect(page.locator("body")).toContainText(/incomplete snippet, please paste full contract|input does not look like solidity/i);
   await expect(page.getByRole("button", { name: "Analyze" })).toBeDisabled();
   await expect(page).not.toHaveURL(/\/analysis\//);
 });

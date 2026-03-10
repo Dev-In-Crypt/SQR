@@ -19,9 +19,14 @@ const envSchema = z.object({
     .string()
     .url()
     .default("https://repo.sourcify.dev/contracts/full_match"),
+  SOURCE_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(12000),
   ANALYZER_VERSION: z.string().default("0.1.0"),
   RULESET_VERSION: z.string().default("0.1.0"),
   ANALYSIS_TOTAL_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
+  STRUCTURE_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  REPORT_GENERATION_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
+  ANALYSIS_STALE_TIMEOUT_MS: z.coerce.number().int().positive().default(240000),
+  ANALYSIS_STALE_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
   SCANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
   OPENAI_EXEC_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   OPENAI_AUDIT_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),

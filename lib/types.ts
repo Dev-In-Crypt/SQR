@@ -8,6 +8,13 @@ export type AnalysisStatus =
   | "FAILED"
   | "PARTIAL";
 
+export type PipelineStage =
+  | "PREPARING_SOURCE"
+  | "RUNNING_STATIC_SCANNER"
+  | "EXTRACTING_CONTRACT_STRUCTURE"
+  | "RUNNING_AI_AUDIT"
+  | "GENERATING_REPORT";
+
 export type PartialReasonCode = "PARTIAL_SOLIDITY_INCOMPLETE" | "PARTIAL_SCANNER_FAILURE";
 
 export type InputType = "PASTE_CODE" | "BASE_ADDRESS";

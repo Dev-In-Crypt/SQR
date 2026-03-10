@@ -11,6 +11,8 @@ export const UI_ERROR_MESSAGES: Record<string, string> = {
   BASESCAN_TIMEOUT: "Source provider timeout. Please retry.",
   BASESCAN_HTTP_429: "Source provider rate limit reached. Please retry shortly.",
   BASESCAN_HTTP_503: "Source provider is temporarily unavailable. Please retry.",
+  SOURCIFY_TIMEOUT: "Source provider timeout. Please retry.",
+  COMPILATION_FAILED: "Source compilation failed in the analysis environment.",
   ANALYSIS_PROCESSING_FAILED: "Analysis could not be completed due to an internal processing issue.",
   OWNER_MISMATCH: "Connected wallet does not match the report owner. Switch wallet and retry.",
   INVALID_SIGNATURE: "Mint authorization signature is invalid.",
@@ -81,6 +83,7 @@ const SOURCE_RETRIEVAL_CODES = new Set([
   "SOURCIFY_HTTP_404",
   "SOURCIFY_HTTP_429",
   "SOURCIFY_HTTP_503",
+  "SOURCIFY_TIMEOUT",
   "INVALID_ADDRESS",
   "INVALID_CHAIN"
 ]);
@@ -99,6 +102,8 @@ export function resolveAnalysisErrorDetails(code?: string | null): AnalysisError
   let category: AnalysisErrorCategory = "INTERNAL_PROCESSING_ERROR";
   if (normalizedCode === "SOURCE_UNVERIFIED") {
     category = "CONTRACT_NOT_VERIFIED";
+  } else if (normalizedCode?.startsWith("BASESCAN_HTTP_") || normalizedCode?.startsWith("SOURCIFY_HTTP_")) {
+    category = "SOURCE_RETRIEVAL_ERROR";
   } else if (normalizedCode && SOURCE_RETRIEVAL_CODES.has(normalizedCode)) {
     category = "SOURCE_RETRIEVAL_ERROR";
   } else if (normalizedCode && normalizedCode.includes("TIMEOUT")) {

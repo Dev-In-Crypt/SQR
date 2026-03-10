@@ -8,6 +8,13 @@ import { resolveAnalysisErrorDetails, resolveUserErrorMessage } from "@/lib/ui-e
 interface AnalysisStatusResponse {
   analysisId: string;
   status: "QUEUED" | "RUNNING" | "COMPLETED" | "DONE_WITH_WARNINGS" | "FAILED" | "PARTIAL";
+  pipelineStage:
+    | "PREPARING_SOURCE"
+    | "RUNNING_STATIC_SCANNER"
+    | "EXTRACTING_CONTRACT_STRUCTURE"
+    | "RUNNING_AI_AUDIT"
+    | "GENERATING_REPORT"
+    | null;
   reportId: string | null;
   errorCode: string | null;
   privateToken: string | null;
@@ -27,6 +34,7 @@ function isTerminalStatus(status: AnalysisStatusResponse["status"]): boolean {
 
 function activePhaseIndex(params: {
   status: AnalysisStatusResponse["status"];
+  pipelineStage: AnalysisStatusResponse["pipelineStage"];
   elapsedMs: number;
 }): number {
   if (params.status === "QUEUED") {
@@ -34,6 +42,17 @@ function activePhaseIndex(params: {
   }
 
   if (params.status === "RUNNING") {
+    if (params.pipelineStage) {
+      const indexByStage: Record<Exclude<AnalysisStatusResponse["pipelineStage"], null>, number> = {
+        PREPARING_SOURCE: 0,
+        RUNNING_STATIC_SCANNER: 1,
+        EXTRACTING_CONTRACT_STRUCTURE: 2,
+        RUNNING_AI_AUDIT: 3,
+        GENERATING_REPORT: 4
+      };
+      return indexByStage[params.pipelineStage];
+    }
+
     const stepMs = 3500;
     return Math.min(ANALYSIS_PHASES.length - 1, Math.floor(params.elapsedMs / stepMs));
   }
@@ -140,7 +159,7 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
         : 0;
 
     return {
-      activeIndex: activePhaseIndex({ status: data.status, elapsedMs }),
+      activeIndex: activePhaseIndex({ status: data.status, pipelineStage: data.pipelineStage, elapsedMs }),
       elapsedMs
     };
   }, [data, phaseTick, runningStartedAt]);

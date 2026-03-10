@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { AIAuditFinding, Finding, SourceBundle, StructuredAuditContext } from "@/lib/types";
 import * as contractStructure from "@/lib/contract-structure";
@@ -138,6 +139,19 @@ function summarizeStructuredAuditContext(context: StructuredAuditContext): {
   };
 }
 
+function isFetchTimeoutError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
+async function runWithTimeout<T>(action: () => Promise<T> | T, timeoutMs: number, code: string): Promise<T> {
+  return await Promise.race([
+    Promise.resolve().then(action),
+    delay(timeoutMs).then(() => {
+      throw new Error(code);
+    })
+  ]);
+}
+
 export async function generateExecutiveSummary(params: {
   findings: Finding[];
   partialReasons: string[];
@@ -226,8 +240,15 @@ export async function generateAIAuditFindings(params: {
 
   if (config.structuredAuditContextEnabled) {
     try {
-      structuredAuditContext = contractStructure.buildStructuredAuditContext(params.sourceBundle);
+      structuredAuditContext = await runWithTimeout(
+        () => contractStructure.buildStructuredAuditContext(params.sourceBundle),
+        config.STRUCTURE_EXTRACTION_TIMEOUT_MS,
+        "STRUCTURE_EXTRACTION_TIMEOUT"
+      );
     } catch (error) {
+      if (error instanceof Error && error.message === "STRUCTURE_EXTRACTION_TIMEOUT") {
+        throw error;
+      }
       logError("Structured audit context extraction failed", {
         message: error instanceof Error ? error.message : String(error)
       });
@@ -344,6 +365,9 @@ export async function generateAIAuditFindings(params: {
       return [];
     }
   } catch (error) {
+    if (isFetchTimeoutError(error)) {
+      throw new Error("AI_AUDIT_TIMEOUT");
+    }
     logError("AI audit request exception", {
       message: error instanceof Error ? error.message : String(error),
       endpoint
