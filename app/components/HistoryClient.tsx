@@ -58,12 +58,6 @@ export default function HistoryClient() {
 
   return (
     <div className="stack">
-      <div className="card stack">
-        <button className="button secondary" type="button" onClick={() => fetchPage(null, true)}>
-          Refresh history
-        </button>
-      </div>
-
       {items.map((item) => (
         <div className="card stack" key={item.reportId}>
           <div className="row">

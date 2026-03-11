@@ -11,7 +11,7 @@ export default async function ReportPage({
   const { token } = await searchParams;
 
   return (
-    <section className="stack">
+    <section className="stack page-container">
       <ReportClient reportId={reportId} token={token ?? null} />
     </section>
   );

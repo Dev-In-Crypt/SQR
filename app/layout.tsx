@@ -1,8 +1,28 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { IBM_Plex_Mono, Manrope, Space_Grotesk } from "next/font/google";
 
 import "@/app/globals.css";
 import WalletButton from "@/app/components/WalletButton";
+
+const headingFont = Space_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-heading"
+});
+
+const bodyFont = Manrope({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-body"
+});
+
+const monoFont = IBM_Plex_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-mono",
+  weight: ["400", "500", "600"]
+});
 
 export const metadata: Metadata = {
   title: "Solidity Quick Review",
@@ -12,7 +32,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
         <div className="app-shell">
           <header className="topbar">
             <Link href="/" className="brand">
@@ -31,11 +51,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </header>
           <main>{children}</main>
           <footer className="footer">
-            <span>Solidity Quick Review</span>
-            <div className="row">
-              <Link href="/terms">Terms</Link>
-              <Link href="/privacy">Privacy</Link>
-              <a href="mailto:sqrsupport@gmail.com">Support: sqrsupport@gmail.com</a>
+            <div className="footer-items">
+              <span className="footer-item">SOLIDITY QUICK REVIEW</span>
+              <span className="footer-item">&copy; 2026 All rights reserved</span>
+              <Link href="/privacy" className="footer-item">
+                Privacy
+              </Link>
+              <Link href="/terms" className="footer-item">
+                Terms &amp; Conditions
+              </Link>
+              <a href="mailto:sqrsupport@gmail.com" className="footer-item">
+                Support: sqrsupport@gmail.com
+              </a>
             </div>
           </footer>
         </div>

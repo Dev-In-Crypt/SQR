@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { isAddress } from "viem";
 
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
 import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
@@ -12,18 +13,29 @@ interface SessionResponse {
 }
 
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
+const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
 export default function HomeForm() {
   const chainId = 8453;
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
-  const [code, setCode] = useState("// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\ncontract Sample {\n    uint256 public x;\n}");
+  const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [codeInteracted, setCodeInteracted] = useState(false);
+  const [addressInteracted, setAddressInteracted] = useState(false);
+  const [showSnippetWarning, setShowSnippetWarning] = useState(false);
+  const [showAddressWarning, setShowAddressWarning] = useState(false);
+
+  const trimmedCode = code.trim();
+  const trimmedAddress = address.trim();
 
   const snippetCompleteness = useMemo(() => analyzeSnippetCompleteness(code), [code]);
-  const snippetIncomplete = tab === "PASTE_CODE" && !snippetCompleteness.isComplete;
+  const snippetIncomplete = !snippetCompleteness.isComplete;
+  const addressInvalid = trimmedAddress.length > 0 && !isAddress(trimmedAddress);
+  const ctaIdleLabel = tab === "PASTE_CODE" ? "Analyze code" : "Analyze contract";
+  const ctaBusyLabel = tab === "PASTE_CODE" ? "Analyzing code..." : "Analyzing contract...";
 
   async function refreshSession() {
     const response = await fetch("/api/v1/session", { cache: "no-store" });
@@ -49,13 +61,66 @@ export default function HomeForm() {
     return () => window.removeEventListener("sqr:session-changed", onSessionChanged);
   }, []);
 
+  useEffect(() => {
+    if (tab !== "PASTE_CODE" || !codeInteracted) {
+      setShowSnippetWarning(false);
+      return;
+    }
+
+    if (trimmedCode.length === 0 || snippetCompleteness.isComplete) {
+      setShowSnippetWarning(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const nextIncomplete = !analyzeSnippetCompleteness(code).isComplete;
+      setShowSnippetWarning(trimmedCode.length > 0 && nextIncomplete);
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [code, codeInteracted, snippetCompleteness.isComplete, tab, trimmedCode.length]);
+
+  useEffect(() => {
+    if (tab !== "BASE_ADDRESS" || !addressInteracted) {
+      setShowAddressWarning(false);
+      return;
+    }
+
+    if (trimmedAddress.length === 0 || !addressInvalid) {
+      setShowAddressWarning(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const nextAddress = address.trim();
+      setShowAddressWarning(nextAddress.length > 0 && !isAddress(nextAddress));
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [address, addressInteracted, addressInvalid, tab, trimmedAddress.length]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (tab === "PASTE_CODE") {
+      if (trimmedCode.length === 0) {
+        return;
+      }
+
       const completeness = analyzeSnippetCompleteness(code);
       if (!completeness.isComplete) {
+        setShowSnippetWarning(true);
         setError(INCOMPLETE_SNIPPET_ERROR);
+        return;
+      }
+    } else {
+      if (trimmedAddress.length === 0) {
+        return;
+      }
+
+      if (!isAddress(trimmedAddress)) {
+        setShowAddressWarning(true);
+        setError(INVALID_ADDRESS_WARNING);
         return;
       }
     }
@@ -73,7 +138,7 @@ export default function HomeForm() {
             }
           : {
               inputType: "BASE_ADDRESS",
-              address,
+              address: trimmedAddress,
               chainId
             };
 
@@ -112,72 +177,96 @@ export default function HomeForm() {
   }
 
   return (
-    <form className="card stack" onSubmit={onSubmit}>
-      <div className="row">
+    <form className="card stack home-form" onSubmit={onSubmit}>
+      <div className="home-tab-row" role="tablist" aria-label="Analyze input type">
         <button
-          className={`button ${tab === "PASTE_CODE" ? "" : "secondary"}`}
+          className={`home-tab ${tab === "PASTE_CODE" ? "is-active" : ""}`}
+          aria-pressed={tab === "PASTE_CODE"}
           type="button"
           onClick={() => {
             setTab("PASTE_CODE");
             setError(null);
+            setShowAddressWarning(false);
           }}
         >
-          Paste Code
+          Paste code
         </button>
         <button
-          className={`button ${tab === "BASE_ADDRESS" ? "" : "secondary"}`}
+          className={`home-tab ${tab === "BASE_ADDRESS" ? "is-active" : ""}`}
+          aria-pressed={tab === "BASE_ADDRESS"}
           type="button"
           onClick={() => {
             setTab("BASE_ADDRESS");
             setError(null);
+            setShowSnippetWarning(false);
           }}
         >
-          Contract Address
+          Contract address
         </button>
       </div>
 
-      <div className="muted">Paste Solidity code or enter a verified Base contract address to start your review.</div>
-
-      {tab === "PASTE_CODE" ? (
-        <label className="stack">
-          <span>Solidity snippet (max 200 lines)</span>
-          <textarea
-            className="textarea"
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            spellCheck={false}
-          />
-          {snippetIncomplete ? <span className="error">{INCOMPLETE_SNIPPET_ERROR}</span> : null}
-        </label>
-      ) : (
-        <div className="stack">
-          <div className="stack">
-            <span>Wallet authentication is required for address analysis.</span>
-            <span className="muted">
-              {walletAddress ? `Wallet connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Wallet not connected"}
-            </span>
-          </div>
-          <label className="stack">
-            <span>Base contract address</span>
-            <input
-              className="input"
-              value={address}
-              placeholder="0x..."
-              onChange={(event) => setAddress(event.target.value)}
+      <div className="stack home-tab-panel">
+        {tab === "PASTE_CODE" ? (
+          <label className="stack home-input-group">
+            <span>Solidity snippet (max 200 lines)</span>
+            <textarea
+              className="textarea home-textarea"
+              aria-invalid={showSnippetWarning}
+              value={code}
+              placeholder={
+                "// Paste your contract code here to scan for common vulnerabilities,\n// gas issues, and risky patterns before deployment."
+              }
+              onChange={(event) => {
+                setCode(event.target.value);
+                setCodeInteracted(true);
+                setError(null);
+              }}
+              spellCheck={false}
             />
+            {showSnippetWarning ? <span className="error">{INCOMPLETE_SNIPPET_ERROR}</span> : null}
           </label>
-        </div>
-      )}
+        ) : (
+          <div className="stack home-input-group">
+            <div className="stack home-wallet-state">
+              <span>Wallet authentication is required for address analysis.</span>
+              <span className="muted">
+                {walletAddress ? `Wallet connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Wallet not connected"}
+              </span>
+            </div>
+            <label className="stack">
+              <span>Base contract address</span>
+              <input
+                className="input home-address-input"
+                value={address}
+                placeholder="0x..."
+                aria-invalid={showAddressWarning}
+                onChange={(event) => {
+                  setAddress(event.target.value);
+                  setAddressInteracted(true);
+                  setError(null);
+                }}
+              />
+            </label>
+            {showAddressWarning ? <span className="error">{INVALID_ADDRESS_WARNING}</span> : null}
+          </div>
+        )}
+      </div>
 
-      <div className="muted">Reports are private by default. You can generate a share link later.</div>
-
-      <div className="row">
-        <button className="button" type="submit" disabled={busy || snippetIncomplete}>
-          {busy ? "Submitting..." : "Analyze Contract"}
+      <div className="row home-form-actions">
+        <button
+          className="button home-submit-button"
+          type="submit"
+          disabled={
+            busy ||
+            (tab === "PASTE_CODE" && (trimmedCode.length === 0 || snippetIncomplete)) ||
+            (tab === "BASE_ADDRESS" && (trimmedAddress.length === 0 || addressInvalid))
+          }
+        >
+          {busy ? ctaBusyLabel : ctaIdleLabel}
         </button>
       </div>
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <div className="error" role="alert">{error}</div> : null}
     </form>
   );
 }
