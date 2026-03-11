@@ -18,6 +18,24 @@ export default function WalletButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showMobileWalletHint, setShowMobileWalletHint] = useState(false);
+
+  function isMobileBrowser(): boolean {
+    if (typeof navigator === "undefined") {
+      return false;
+    }
+
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  }
+
+  function getMetaMaskDappLink(): string {
+    if (typeof window === "undefined") {
+      return "https://metamask.app.link/dapp/solidity-scan.com";
+    }
+
+    const locationPath = `${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
+    return `https://metamask.app.link/dapp/${locationPath}`;
+  }
 
   async function refreshSession() {
     const response = await fetch("/api/v1/session", { cache: "no-store" });
@@ -64,12 +82,20 @@ export default function WalletButton({
 
   async function connectWallet() {
     if (!window.ethereum) {
-      setError("No injected wallet found (MetaMask/Rabby). ");
+      if (isMobileBrowser()) {
+        setShowMobileWalletHint(true);
+        setError("Wallet not found in this browser. Open Solidity Scan inside MetaMask or Rabby browser.");
+        return;
+      }
+
+      setShowMobileWalletHint(false);
+      setError("No injected wallet found (MetaMask/Rabby).");
       return;
     }
 
     setBusy(true);
     setError(null);
+    setShowMobileWalletHint(false);
 
     try {
       const accounts = (await window.ethereum.request({
@@ -153,6 +179,11 @@ export default function WalletButton({
         <button className="button secondary" type="button" onClick={connectWallet} disabled={busy}>
           {busy ? "Connecting..." : "Connect wallet"}
         </button>
+        {showMobileWalletHint ? (
+          <a className="button secondary" href={getMetaMaskDappLink()} target="_blank" rel="noreferrer">
+            Open in MetaMask
+          </a>
+        ) : null}
         {error ? <div className="error">{error}</div> : null}
       </div>
     );

@@ -103,7 +103,7 @@ export default function HomePage() {
                   </p>
                 </article>
                 <article className="info-block stack">
-                  <h3>Deterministic&nbsp;and&nbsp;shareable&nbsp;output</h3>
+                  <h3>Deterministic and shareable output</h3>
                   <p className="muted">
                     Use deterministic report hashes and optional onchain receipts to show which code was scanned and
                     which findings were produced at that time.
