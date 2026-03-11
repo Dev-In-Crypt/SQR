@@ -141,8 +141,8 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
     }
 
     return data.privateToken
-      ? `/r/${data.reportId}?token=${encodeURIComponent(data.privateToken)}`
-      : `/r/${data.reportId}`;
+      ? `/report/${data.reportId}?token=${encodeURIComponent(data.privateToken)}`
+      : `/report/${data.reportId}`;
   }, [data?.privateToken, data?.reportId]);
 
   const phaseState = useMemo(() => {
@@ -242,7 +242,7 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
 
           {reportLink ? (
             <div className="stack">
-              <Link className="button" href={reportLink}>
+              <Link className="button" href={reportLink} target="_blank" rel="noreferrer">
                 Open report
               </Link>
               {data.privateToken ? (

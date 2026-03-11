@@ -50,6 +50,15 @@ describe("solidity pragma parsing", () => {
     expect(parsed.failureReason).toBe("UNSUPPORTED_PRAGMA_EXPRESSION");
   });
 
+  it("parses exact pragma with equals prefix", () => {
+    const parsed = parseSolidityPragmaExpression("=0.7.6");
+    expect(parsed.constraint?.kind).toBe("exact");
+
+    const version = parseSolidityVersion("0.7.6");
+    expect(version).toBeTruthy();
+    expect(isVersionCompatibleWithConstraint(version!, parsed.constraint!)).toBe(true);
+  });
+
   it("checks compatibility for caret constraints", () => {
     const caret = parseSolidityPragmaExpression("^0.8.20");
     const v824 = parseSolidityVersion("0.8.24");

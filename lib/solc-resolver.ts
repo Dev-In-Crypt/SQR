@@ -223,23 +223,26 @@ function buildManagerEnv(base: NodeJS.ProcessEnv, version: string): NodeJS.Proce
 function pragmaIsWithinSupportedPolicy(
   constraint: NonNullable<ReturnType<typeof extractSolidityPragmaFromFiles>>["pragma"]["constraint"]
 ): boolean {
+  const isSupportedMinor = (minor: number) => minor === 7 || minor === 8;
+
   if (!constraint) {
     return false;
   }
 
   if (constraint.kind === "exact") {
-    return constraint.version.major === 0 && constraint.version.minor === 8;
+    return constraint.version.major === 0 && isSupportedMinor(constraint.version.minor);
   }
 
   if (constraint.kind === "caret") {
-    return constraint.baseVersion.major === 0 && constraint.baseVersion.minor === 8;
+    return constraint.baseVersion.major === 0 && isSupportedMinor(constraint.baseVersion.minor);
   }
 
   return (
     constraint.minInclusive.major === 0 &&
-    constraint.minInclusive.minor === 8 &&
+    constraint.minInclusive.minor >= 7 &&
+    constraint.minInclusive.minor <= 8 &&
     constraint.maxExclusive.major === 0 &&
-    constraint.maxExclusive.minor === 9
+    constraint.maxExclusive.minor <= 9
   );
 }
 

@@ -19,7 +19,11 @@ export const UI_ERROR_MESSAGES: Record<string, string> = {
   TX_NOT_FOUND_REQUIRED_NETWORK: "Transaction was not found on the required network.",
   MINT_EVENT_NOT_FOUND: "ReceiptMinted event was not found in the transaction.",
   HASH_MISMATCH: "Transaction report hash does not match this report.",
-  RECEIPT_CHAIN_UNAVAILABLE: "Receipt network is temporarily unavailable. Please try again."
+  RECEIPT_CHAIN_UNAVAILABLE: "Receipt network is temporarily unavailable. Please try again.",
+  RECEIPT_CONTRACT_UNAVAILABLE: "Receipt minting is temporarily unavailable. Please try again later.",
+  RECEIPT_RPC_UNAVAILABLE: "Receipt network RPC is unavailable. Please try again later.",
+  RECEIPT_UNAVAILABLE: "Receipt minting is currently unavailable.",
+  UNSUPPORTED_RECEIPT_CHAIN: "Receipt network configuration is currently unavailable."
 };
 
 export type AnalysisErrorCategory =

@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import WalletButton from "@/app/components/WalletButton";
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
 import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
 
@@ -15,10 +14,10 @@ interface SessionResponse {
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 
 export default function HomeForm() {
+  const chainId = 8453;
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\n\ncontract Sample {\n    uint256 public x;\n}");
   const [address, setAddress] = useState("");
-  const [chainId, setChainId] = useState(8453);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -39,6 +38,15 @@ export default function HomeForm() {
 
   useEffect(() => {
     void refreshSession();
+  }, []);
+
+  useEffect(() => {
+    const onSessionChanged = () => {
+      void refreshSession();
+    };
+
+    window.addEventListener("sqr:session-changed", onSessionChanged);
+    return () => window.removeEventListener("sqr:session-changed", onSessionChanged);
   }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -92,7 +100,10 @@ export default function HomeForm() {
         );
       }
 
-      window.location.href = `/analysis/${json.analysisId}`;
+      const analysisWindow = window.open(`/analysis/${json.analysisId}`, "_blank", "noopener,noreferrer");
+      if (!analysisWindow) {
+        window.location.href = `/analysis/${json.analysisId}`;
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     } finally {
@@ -121,17 +132,11 @@ export default function HomeForm() {
             setError(null);
           }}
         >
-          Base Address
+          Contract Address
         </button>
       </div>
 
-      <label className="stack">
-        <span>Chain</span>
-        <select className="select" value={chainId} onChange={(e) => setChainId(Number(e.target.value))}>
-          <option value={8453}>Base Mainnet (8453)</option>
-          <option value={84532}>Base Sepolia (84532)</option>
-        </select>
-      </label>
+      <div className="muted">Paste Solidity code or enter a verified Base contract address to start your review.</div>
 
       {tab === "PASTE_CODE" ? (
         <label className="stack">
@@ -148,8 +153,9 @@ export default function HomeForm() {
         <div className="stack">
           <div className="stack">
             <span>Wallet authentication is required for address analysis.</span>
-            <WalletButton onSessionChange={refreshSession} />
-            <span className="muted">Current wallet: {walletAddress ?? "not connected"}</span>
+            <span className="muted">
+              {walletAddress ? `Wallet connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Wallet not connected"}
+            </span>
           </div>
           <label className="stack">
             <span>Base contract address</span>
@@ -167,7 +173,7 @@ export default function HomeForm() {
 
       <div className="row">
         <button className="button" type="submit" disabled={busy || snippetIncomplete}>
-          {busy ? "Submitting..." : "Analyze"}
+          {busy ? "Submitting..." : "Analyze Contract"}
         </button>
       </div>
 

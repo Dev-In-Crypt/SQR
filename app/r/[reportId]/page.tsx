@@ -1,6 +1,6 @@
-import ReportClient from "@/app/components/ReportClient";
+import { redirect } from "next/navigation";
 
-export default async function ReportPage({
+export default async function LegacyReportPage({
   params,
   searchParams
 }: {
@@ -10,9 +10,5 @@ export default async function ReportPage({
   const { reportId } = await params;
   const { token } = await searchParams;
 
-  return (
-    <section className="stack">
-      <ReportClient reportId={reportId} token={token ?? null} />
-    </section>
-  );
+  redirect(token ? `/report/${reportId}?token=${encodeURIComponent(token)}` : `/report/${reportId}`);
 }

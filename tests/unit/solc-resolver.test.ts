@@ -111,6 +111,43 @@ describe("solc resolver", () => {
     expect(resolved.commandEnv?.SOLC_VERSION).toBe("0.8.28");
   });
 
+  it("selects 0.7.x via solc-select when pragma requires legacy compiler", async () => {
+    const runtime = async (command: string, args: string[]) => {
+      if (command === "solc" && args[0] === "--version") {
+        return {
+          code: 0,
+          stdout: "Version: 0.8.24+commit.abc",
+          stderr: ""
+        } as SolcCommandResult;
+      }
+
+      if (command === "solc-select") {
+        return {
+          code: 0,
+          stdout: "0.7.6\n0.8.24 (current)",
+          stderr: ""
+        } as SolcCommandResult;
+      }
+
+      return {
+        code: 1,
+        stdout: "",
+        stderr: "unexpected"
+      } as SolcCommandResult;
+    };
+
+    const resolved = await resolveSolcRuntimeForSource({
+      sourceBundle: makeBundle("=0.7.6"),
+      cwd: process.cwd(),
+      runCommand: runtime
+    });
+
+    expect(resolved.resolutionStrategy).toBe("solc_select_version");
+    expect(resolved.resolvedSolcVersion).toBe("0.7.6");
+    expect(resolved.command).toBe("solc");
+    expect(resolved.commandEnv?.SOLC_VERSION).toBe("0.7.6");
+  });
+
   it("returns unresolved warning context when pragma cannot be satisfied", async () => {
     const runtime = async (command: string) => {
       if (command === "solc") {

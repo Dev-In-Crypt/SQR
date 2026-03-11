@@ -2,6 +2,7 @@ import { fail, ok, handleRouteError } from "@/lib/api";
 import { canReadReport, isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
 import { getSessionContext } from "@/lib/session";
+import type { ReportPayload } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,15 @@ export async function GET(
     }
 
     const owner = isReportOwner(report, viewer);
+    const reportPayload = report.reportJson as unknown as ReportPayload;
+    const visibleReport: ReportPayload = owner
+      ? reportPayload
+      : {
+          ...reportPayload,
+          warnings: [],
+          scannerErrors: [],
+          partialReasons: []
+        };
     const receipt = report.receipt
       ? {
           ...report.receipt,
@@ -64,7 +74,7 @@ export async function GET(
       createdAt: report.createdAt,
       updatedAt: report.updatedAt,
       isOwner: owner,
-      report: report.reportJson,
+      report: visibleReport,
       findings: report.findings,
       receipt,
       analysis: {

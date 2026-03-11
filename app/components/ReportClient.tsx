@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 
-import WalletButton from "@/app/components/WalletButton";
 import { providerErrorCode } from "@/lib/eip1193";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { receiptRegistryAbi } from "@/lib/receipt-shared";
@@ -135,14 +134,30 @@ const DEFAULT_SCANNER_SUMMARY_NOTE_INDEX = 0;
 
 function displayInputType(metadataInputType: string, contractAddress?: string): string {
   if (metadataInputType === "PASTE_CODE") {
-    return "snippet";
+    return "Snippet";
   }
 
   if (metadataInputType === "BASE_ADDRESS") {
-    return contractAddress ? "verified contract" : "contract address";
+    return contractAddress ? "Contract address" : "Contract address";
   }
 
-  return metadataInputType.toLowerCase();
+  return metadataInputType;
+}
+
+function shortenHash(value: string): string {
+  if (value.length <= 16) {
+    return value;
+  }
+
+  return `${value.slice(0, 10)}...${value.slice(-8)}`;
+}
+
+function normalizeSummaryText(value: string): string {
+  return value
+    .replace(/secure for deployment/gi, "did not identify findings within the current automated review scope")
+    .replace(/safe for deployment/gi, "did not identify findings within the current automated review scope")
+    .replace(/no security vulnerabilities/gi, "no findings were identified within the current automated review scope")
+    .replace(/adheres to best practices/gi, "matches patterns reviewed in the current automated scope");
 }
 
 function chainHexToNumber(chainHex: string): number {
@@ -178,6 +193,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     nonce: string;
     deadline: string;
   } | null>(null);
+  const [copiedHash, setCopiedHash] = useState(false);
 
   async function loadReport() {
     setError(null);
@@ -292,21 +308,44 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     );
   }, [data, severityFilter]);
 
+  const totalFindings = data?.report.findings.length ?? 0;
+
   const coverage = useMemo(() => {
     if (!data) {
       return null;
     }
 
     const hasStaticNotes = data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0;
-    const aiCount = data.report.aiAuditFindings?.length ?? 0;
 
     return {
-      staticAnalysis: hasStaticNotes ? "completed with notes" : "completed",
-      aiLogicReview: `included (${aiCount} ${aiCount === 1 ? "finding" : "findings"})`,
+      staticAnalysis: hasStaticNotes ? "Completed" : "Completed",
+      aiLogicReview: "Included",
       inputType: displayInputType(data.report.metadata.inputType, data.report.metadata.contractAddress),
-      reportHashMode: "deterministic (scanner-derived)"
+      reportHashMode: "Available"
     };
   }, [data]);
+
+  const summaryText = useMemo(() => {
+    if (!data) {
+      return "";
+    }
+
+    return normalizeSummaryText(data.report.scannerSummary || data.report.executiveSummary);
+  }, [data]);
+
+  async function copyHash() {
+    if (!data?.reportHash) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(data.reportHash);
+      setCopiedHash(true);
+      setTimeout(() => setCopiedHash(false), 1200);
+    } catch {
+      setCopiedHash(false);
+    }
+  }
 
   async function updateVisibility(visibility: "PRIVATE" | "PUBLIC") {
     setBusy(true);
@@ -577,9 +616,12 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <span className={`badge ${data.topSeverity}`}>{data.topSeverity}</span>
               <span className="badge">{data.visibility}</span>
             </div>
-
-            <div className="muted">reportId: {data.reportId}</div>
-            <div className="muted">reportHash: {data.reportHash}</div>
+            <div className="row">
+              <span className="muted">Report hash: {shortenHash(data.reportHash)}</span>
+              <button className="button ghost" type="button" onClick={copyHash}>
+                {copiedHash ? "Copied" : "Copy hash"}
+              </button>
+            </div>
 
             {coverage ? (
               <div className="stack">
@@ -603,58 +645,49 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             <div className="stack">
               <h2 style={{ margin: 0 }}>Scanner Summary</h2>
-              <p>{data.report.scannerSummary || data.report.executiveSummary}</p>
+              <p>{summaryText}</p>
               <p className="muted">
                 {SCANNER_SUMMARY_NOTES[Math.min(DEFAULT_SCANNER_SUMMARY_NOTE_INDEX, SCANNER_SUMMARY_NOTES.length - 1)]}
               </p>
             </div>
 
-            <div className="row">
-              <label>
-                Severity filter:
-                <select
-                  className="select"
-                  value={severityFilter}
-                  onChange={(event) => setSeverityFilter(event.target.value as "ALL" | Severity)}
-                >
-                  <option value="ALL">ALL</option>
-                  <option value="CRITICAL">CRITICAL</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="LOW">LOW</option>
-                  <option value="INFO">INFO</option>
-                </select>
-              </label>
-            </div>
+            {totalFindings > 0 ? (
+              <div className="row">
+                <label>
+                  Severity filter:
+                  <select
+                    className="select"
+                    value={severityFilter}
+                    onChange={(event) => setSeverityFilter(event.target.value as "ALL" | Severity)}
+                  >
+                    <option value="ALL">ALL</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="LOW">LOW</option>
+                    <option value="INFO">INFO</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
 
             {data.isOwner ? (
               <div className="stack">
                 <hr className="divider" />
-                <WalletButton onSessionChange={loadReport} />
-                <div className="muted">Wallet network chainId: {formatWalletChain(walletChainHex)}</div>
-                <div className="muted">
-                  Required network: {runtimeConfig ? `${runtimeConfig.requiredNetworkLabel} (${runtimeConfig.requiredChainId})` : "loading..."}
-                </div>
-                <div className="row">
+                <div className="action-group">
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={busy || data.visibility === "PUBLIC"}
-                    onClick={() => updateVisibility("PUBLIC")}
+                    disabled={busy}
+                    onClick={() => updateVisibility(data.visibility === "PUBLIC" ? "PRIVATE" : "PUBLIC")}
                   >
-                    Publish report
+                    {data.visibility === "PUBLIC" ? "Set private" : "Set public"}
                   </button>
-                  <button
-                    className="button secondary"
-                    type="button"
-                    disabled={busy || data.visibility === "PRIVATE"}
-                    onClick={() => updateVisibility("PRIVATE")}
-                  >
-                    Make private
-                  </button>
-                  <button className="button" type="button" disabled={busy} onClick={createShareLink}>
-                    Generate private link
-                  </button>
+                  {data.visibility === "PRIVATE" ? (
+                    <button className="button" type="button" disabled={busy} onClick={createShareLink}>
+                      Generate private link
+                    </button>
+                  ) : null}
                   <button className="button warn" type="button" disabled={busy} onClick={mintReceipt}>
                     Mint Base receipt
                   </button>
@@ -675,6 +708,24 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 ) : null}
               </div>
             ) : null}
+
+            <details className="card">
+              <summary style={{ cursor: "pointer", fontWeight: 700 }}>Technical details</summary>
+              <div className="stack" style={{ marginTop: 10 }}>
+                <div className="muted">reportId: {data.reportId}</div>
+                <div className="muted">reportHash: {data.reportHash}</div>
+                <div className="muted">generatedAt: {new Date(data.report.metadata.generatedAt).toLocaleString()}</div>
+                <div className="muted">inputType: {data.report.metadata.inputType}</div>
+                <div className="muted">chainId: {data.report.metadata.chainId}</div>
+                <div className="muted">visibility: {data.visibility}</div>
+                {runtimeConfig ? (
+                  <div className="muted">
+                    requiredNetwork: {runtimeConfig.requiredNetworkLabel} ({runtimeConfig.requiredChainId})
+                  </div>
+                ) : null}
+                <div className="muted">walletNetwork: {formatWalletChain(walletChainHex)}</div>
+              </div>
+            </details>
           </div>
 
           {data.receipt ? (
@@ -692,7 +743,9 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
-            {findings.length === 0 ? <div>No findings for selected filter.</div> : null}
+            {findings.length === 0 ? (
+              <div>No findings were identified within the current automated review scope for this filter.</div>
+            ) : null}
 
             {findings.map((finding) => (
               <details key={finding.id} className="card">
@@ -755,7 +808,10 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             ))}
           </div>
 
-          {data.report.warnings.length > 0 || data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0 ? (
+          {data.isOwner &&
+          (data.report.warnings.length > 0 ||
+            data.report.scannerErrors.length > 0 ||
+            data.report.partialReasons.length > 0) ? (
             <div className="card stack">
               <h3 style={{ margin: 0 }}>Analysis Notes</h3>
               {data.report.warnings.map((item, idx) => (

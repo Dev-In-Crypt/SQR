@@ -192,6 +192,26 @@ export function parseSolidityPragmaExpression(expressionRaw: string): ParsedSoli
     };
   }
 
+  const exactWithEqualsMatch = expression.match(/^=\s*(\d+\.\d+\.\d+)$/);
+  if (exactWithEqualsMatch) {
+    const exactWithEquals = parseSolidityVersion(exactWithEqualsMatch[1]);
+    if (!exactWithEquals) {
+      return {
+        expression,
+        constraint: null,
+        failureReason: "UNPARSEABLE_VERSION"
+      };
+    }
+
+    return {
+      expression,
+      constraint: {
+        kind: "exact",
+        version: exactWithEquals
+      }
+    };
+  }
+
   const rangeMatch = expression.match(/^>=\s*(\d+\.\d+\.\d+)\s*<\s*(\d+\.\d+\.\d+)$/);
   if (rangeMatch) {
     const minInclusive = parseSolidityVersion(rangeMatch[1]);

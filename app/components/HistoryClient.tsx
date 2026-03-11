@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import WalletButton from "@/app/components/WalletButton";
-
 interface HistoryItem {
   reportId: string;
   createdAt: string;
@@ -61,7 +59,6 @@ export default function HistoryClient() {
   return (
     <div className="stack">
       <div className="card stack">
-        <WalletButton onSessionChange={() => fetchPage(null, true)} />
         <button className="button secondary" type="button" onClick={() => fetchPage(null, true)}>
           Refresh history
         </button>
@@ -77,7 +74,7 @@ export default function HistoryClient() {
           <div className="muted">{new Date(item.createdAt).toLocaleString()}</div>
           <div className="muted">{item.reportHash}</div>
           <div className="row">
-            <Link className="button" href={`/r/${item.reportId}`}>
+            <Link className="button" href={`/report/${item.reportId}`}>
               Open report
             </Link>
             {item.receipt ? (

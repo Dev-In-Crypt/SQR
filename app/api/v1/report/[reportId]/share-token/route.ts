@@ -51,7 +51,7 @@ export async function POST(
       }
     });
 
-    const relativePath = `/r/${report.id}?token=${token}`;
+    const relativePath = `/report/${report.id}?token=${token}`;
 
     return ok({
       token,

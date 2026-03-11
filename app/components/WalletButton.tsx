@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 interface SessionResponse {
@@ -11,19 +13,23 @@ export default function WalletButton({
 }: {
   onSessionChange?: () => void;
 }) {
+  const pathname = usePathname();
   const [wallet, setWallet] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function refreshSession() {
     const response = await fetch("/api/v1/session", { cache: "no-store" });
     if (!response.ok) {
       setWallet(null);
+      window.dispatchEvent(new Event("sqr:session-changed"));
       return;
     }
 
     const data = (await response.json()) as SessionResponse;
     setWallet(data.walletAddress);
+    window.dispatchEvent(new Event("sqr:session-changed"));
     onSessionChange?.();
   }
 
@@ -31,6 +37,30 @@ export default function WalletButton({
     void refreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const onWindowClick = () => setMenuOpen(false);
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("click", onWindowClick);
+    window.addEventListener("keydown", onEscape);
+    return () => {
+      window.removeEventListener("click", onWindowClick);
+      window.removeEventListener("keydown", onEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
 
   async function connectWallet() {
     if (!window.ethereum) {
@@ -108,6 +138,7 @@ export default function WalletButton({
     setError(null);
     try {
       await fetch("/api/v1/auth/logout", { method: "POST" });
+      setMenuOpen(false);
       await refreshSession();
     } catch (logoutError) {
       setError(logoutError instanceof Error ? logoutError.message : String(logoutError));
@@ -128,12 +159,31 @@ export default function WalletButton({
   }
 
   return (
-    <div className="row">
-      <span className="badge">{wallet.slice(0, 6)}...{wallet.slice(-4)}</span>
-      <button className="button secondary" type="button" onClick={logout} disabled={busy}>
-        Logout
+    <div className="wallet-menu-wrap">
+      <button
+        className="button secondary"
+        type="button"
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation();
+          setMenuOpen((open) => !open);
+        }}
+      >
+        {wallet.slice(0, 6)}...{wallet.slice(-4)}
       </button>
-      {error ? <span className="error">{error}</span> : null}
+      {menuOpen ? (
+        <div className="wallet-menu" onClick={(event) => event.stopPropagation()}>
+          {pathname !== "/history" ? (
+            <Link className="wallet-menu-item" href="/history" onClick={() => setMenuOpen(false)}>
+              History
+            </Link>
+          ) : null}
+          <button className="wallet-menu-item" type="button" onClick={logout} disabled={busy}>
+            Disconnect
+          </button>
+        </div>
+      ) : null}
+      {error ? <div className="error">{error}</div> : null}
     </div>
   );
 }

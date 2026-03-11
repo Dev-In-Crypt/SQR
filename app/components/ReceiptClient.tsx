@@ -97,7 +97,7 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
             <p className="muted">
               No receipt minted yet. This report exists offchain, but has no onchain timestamp proof.
             </p>
-            <Link className="button" href={`/r/${reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
+            <Link className="button" href={`/report/${reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
               Open report and mint receipt
             </Link>
           </div>

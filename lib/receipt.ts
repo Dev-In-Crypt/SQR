@@ -98,12 +98,39 @@ export async function readOwnerMintNonce(owner: string): Promise<bigint> {
   const receiptContract = configuredReceiptContract();
   const client = requiredChainClient();
 
-  return client.readContract({
-    address: receiptContract,
-    abi: receiptRegistryAbi,
-    functionName: "nonces",
-    args: [owner as Address]
-  });
+  try {
+    return await client.readContract({
+      address: receiptContract,
+      abi: receiptRegistryAbi,
+      functionName: "nonces",
+      args: [owner as Address]
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    if (
+      message.includes("returned no data") ||
+      message.includes("does not have the function") ||
+      message.includes("address is not a contract")
+    ) {
+      throw new ApiError(
+        503,
+        "RECEIPT_CONTRACT_UNAVAILABLE",
+        "Receipt contract is unavailable on the required network. Please try again later."
+      );
+    }
+
+    if (
+      message.includes("fetch failed") ||
+      message.includes("timeout") ||
+      message.includes("network") ||
+      message.includes("http request failed")
+    ) {
+      throw new ApiError(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
+    }
+
+    throw new ApiError(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt subsystem is temporarily unavailable.");
+  }
 }
 
 export async function prepareMintAuthorization(params: {
