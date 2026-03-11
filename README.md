@@ -113,6 +113,16 @@ Recommended process management is native `systemd` with two units:
 
 Reference setup is provided in `deploy/systemd/` with an operations guide in `docs/operations/systemd-vps.md`.
 
+For production deploys on VPS, use the safe deploy flow:
+
+```bash
+npm run deploy:vps
+npm run deploy:vps:verify
+```
+
+The deploy script builds the app, restarts `sqr-web`, checks health endpoints, and auto-rolls back to the previous
+`.next` build if startup/health checks fail.
+
 Run-time services:
 
 - API/web service

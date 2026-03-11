@@ -2,6 +2,7 @@
 node_modules/
 .next/
 .next-test/
+.deploy/
 dist/
 coverage/
 *.tsbuildinfo
@@ -84,4 +85,3 @@ NewPlan.md
 lib/prompts.ts
 lib/prompts.local.ts
 prompts/
-

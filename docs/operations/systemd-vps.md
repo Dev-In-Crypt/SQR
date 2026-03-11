@@ -55,6 +55,37 @@ journalctl -u sqr-web -n 100 --no-pager
 journalctl -u sqr-worker -n 100 --no-pager
 ```
 
+## 4.1) Safe deploy (recommended)
+
+Use the repo-safe deployment script to avoid serving a broken release when build/start fails.
+
+```bash
+chmod +x scripts/deploy-vps-safe.sh scripts/verify-vps-runtime.sh
+npm run deploy:vps
+```
+
+What it does:
+
+- creates a timestamped backup of current `.next`
+- runs `npm run build`
+- restarts `sqr-web`
+- checks local and public health endpoints
+- rolls back to previous `.next` and restarts `sqr-web` if deployment fails
+
+Post-deploy verification:
+
+```bash
+npm run deploy:vps:verify
+```
+
+Optional overrides:
+
+- `SQR_ENV_FILE` (default `/etc/sqr/sqr.env`)
+- `SQR_LOCAL_HEALTH_URL` (default `http://127.0.0.1:3000/api/v1/health`)
+- `SQR_PUBLIC_APP_URL` / `SQR_PUBLIC_HEALTH_URL`
+
+The deploy script requires non-interactive sudo for `systemctl` commands.
+
 ## 5) Nginx reverse proxy
 
 ```bash
