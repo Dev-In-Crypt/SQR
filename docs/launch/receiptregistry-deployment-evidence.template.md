@@ -25,7 +25,7 @@ Provenance markers:
 ## Local-only observations (not launch proof)
 
 - Local `.env` contract address observed:
-  - `0x8F37c06766882E60c8d2A406baEA45c57f826789`
+  - `0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B`
   - provenance: `LOCAL_ONLY_UNVERIFIED_FOR_LAUNCH`
   - launch status: `UNVERIFIED`, `REQUIRES_DEPLOY_EVIDENCE`
 

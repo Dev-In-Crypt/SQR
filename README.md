@@ -1,159 +1,156 @@
 # Solidity Quick Review
 
-## Project Overview
+## What it does
 
-Solidity Quick Review is a web-based smart contract analysis platform. Users submit Solidity snippets or verified contract addresses, then receive a report in the web app. The report combines deterministic scanner findings with a separate AI review stage. Reports can be kept private, shared, or made public. A report can also be anchored onchain through an optional receipt flow on Base.
+- Analyzes Solidity snippets and verified Base contract source.
+- Combines deterministic static findings with an AI logic review.
+- Returns a structured report with severities, evidence, and remediation direction.
+- Keeps reports private by default with optional sharing/public visibility.
+- Optionally anchors report integrity onchain via a Base receipt.
 
-## User Workflow
+## Goals
 
-1. User connects wallet.
-2. User submits one of:
-   - Solidity code snippet
-   - verified contract address
-3. System runs the asynchronous analysis pipeline.
-   - Status page shows approximate progress phases (source prep, scanner, structure extraction, AI audit, report generation).
-   - Failed runs are shown with categorized user-facing error states.
-4. Report is generated and displayed in the web app.
-5. User can:
-   - keep report private
-   - switch report to public
-   - generate a share link
-   - mint an onchain receipt
-6. Reports are stored and accessible through history tied to user wallet/session ownership.
+- Provide a fast pre-audit checkpoint for Solidity teams and Base builders.
+- Preserve report integrity through stable deterministic hashing.
+- Make review outputs shareable without exposing private data by default.
+- Add optional onchain proof that a specific report existed at a specific time.
 
-## Analysis Pipeline
+## Live demo
 
-Pipeline stages:
+- App: https://solidity-scan.com
+- Health endpoint: https://solidity-scan.com/api/v1/health
 
-1. Source ingestion (snippet or verified contract source by address).
-2. Source normalization and validation.
-3. Static analysis scanner stage (Slither when available, with fallback behavior).
-4. Structured contract context extraction.
-5. AI audit stage.
-6. Report assembly and persistence.
+## Demo materials
 
-Analysis execution is asynchronous and processed through the worker pipeline (queue mode) or inline runtime mode, depending on deployment configuration.
+- Public product flow: submit snippet or verified Base address, wait for async analysis, inspect report.
+- Receipt flow: connect wallet on required network, prepare EIP-712 payload, mint, then confirm transaction.
+- Test coverage matrix: `docs/test-matrix.md`
+- Impact metrics snapshot (manual weekly update): `docs/impact.md`
 
-## Report Model
+## Quickstart local
 
-Each report contains:
+### Option A: Docker for data services (recommended)
 
-- scanner findings (deterministic)
-- AI audit findings (heuristic)
-- executive/scanner summary
-- analysis coverage block (what stages/components completed)
-- analysis metadata
-- warnings and partial-analysis signals when applicable
+1. Copy env template: `cp .env.example .env`
+2. Start Postgres and Redis: `docker compose up -d postgres redis`
+3. Install dependencies: `npm ci`
+4. Generate Prisma client and apply schema: `npx prisma generate && npx prisma db push`
+5. Start web app: `npm run dev`
+6. Start worker in second terminal: `npm run worker`
+7. Check health: `curl http://localhost:3000/api/v1/health`
 
-Important behavior:
+### Option B: Manual dependencies
 
-- AI findings do not affect deterministic report hashing.
-- `reportHash` is derived from scanner-based deterministic report data.
+- PostgreSQL 16+
+- Redis 7+
+- Slither (`slither-analyzer`)
+- `solc` 0.8.24 (matches `foundry.toml`)
+- Foundry (`forge`) for contract tests
 
-This platform is an automated review layer and does not replace a full manual security audit.
+## Installation steps
 
-## Report Visibility
+1. Install Node.js 20+.
+2. Install project dependencies: `npm ci`.
+3. Configure environment from `.env.example` (do not commit secrets).
+4. Ensure database and Redis are reachable.
+5. Install scanner toolchain (`slither`, `solc 0.8.24`, optional Foundry for contract tests).
+6. Initialize database: `npx prisma generate && npx prisma db push`.
+7. Run app and worker (`npm run dev` and `npm run worker`).
 
-Reports support owner-controlled visibility modes:
+## Working demo
 
-- **Private**: default mode; access is restricted to owner context and private share token links.
-- **Public**: report can be viewed without private token.
+1. Open https://solidity-scan.com
+2. Submit Solidity snippet or verified Base contract address.
+3. Review generated findings and metadata.
+4. Optionally mint an onchain receipt from the report page.
 
-Users can generate share links for private report access and can switch visibility mode from the report UI/API.
+## Production deployment
 
-## Onchain Receipt
-
-Users can mint an optional onchain receipt for a report.
-
-- Receipt flow anchors the report's `reportHash`.
-- Receipt minting is executed on Base.
-- Stored receipt metadata links the offchain report and onchain transaction.
-- The receipt provides proof that a specific report hash existed at a specific onchain event time.
-
-## Supported Inputs
-
-### Supported
-
-- Solidity code snippets
-- verified Solidity contract source
-- contract addresses on supported Base networks
-
-### Partial support
-
-- multi-contract source bundles
-- contracts with simple inheritance graphs
-
-### Not fully supported yet
-
-- upgradeable proxy systems
-- delegatecall-heavy architectures
-- large multi-file protocol repositories
-- assembly-heavy contracts
-
-## System Architecture
-
-Main components:
-
-- **Web application**: user submission, report view, visibility controls, receipt UI, history UI
-- **API service**: analysis lifecycle, report access control, history, receipt endpoints
-- **Analysis worker**: asynchronous analysis job execution
-- **Scanner engine**: Slither-based static analysis stage
-- **AI audit stage**: model-based heuristic review
-- **Database**: users, sessions, analyses, reports, findings, receipts
-- **Receipt contract**: onchain report receipt registry on Base
-
-## Deployment
-
-Typical production topology is VPS-based with separate web/API and worker processes.
-
-Recommended process management is native `systemd` with two units:
+Production runtime uses a VPS with two `systemd` services:
 
 - `sqr-web.service`
 - `sqr-worker.service`
 
-Reference setup is provided in `deploy/systemd/` with an operations guide in `docs/operations/systemd-vps.md`.
-
-For production deploys on VPS, use the safe deploy flow:
+Safe deploy flow:
 
 ```bash
 npm run deploy:vps
 npm run deploy:vps:verify
 ```
 
-The deploy script builds the app, restarts `sqr-web`, checks health endpoints, and auto-rolls back to the previous
-`.next` build if startup/health checks fail.
+Operational runbook: `docs/operations/systemd-vps.md`
 
-Run-time services:
+## Base deployment
 
-- API/web service
-- worker process
-- database
-- queue backend (when queue mode is enabled)
+- Chain: Base mainnet (`8453`)
+- ReceiptRegistry contract: `0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B`
+- Verification link: https://basescan.org/address/0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B#code
+- Onchain write model:
+  - primary key: `reportHash`
+  - stored metadata: `receiptId`, `owner`, `contractAddress`, `analyzerVersionHash`, `timestamp`
+  - emitted event: `ReceiptMinted(reportHash, contractAddress, analyzerVersionHash, owner, minter, timestamp, receiptId)`
+  - authorization protections: signed EIP-712 payload with `nonce` and `deadline`
 
-Major dependencies:
+## Security model
 
-- Node.js
-- PostgreSQL
-- Redis
-- Slither
-- solc
+- Reports are private-by-default and owner-scoped unless explicitly shared/published.
+- Deterministic `reportHash` is derived from scanner-grounded report data.
+- AI findings are advisory and do not modify deterministic hash output.
+- Receipt minting is signature-gated with EIP-712 typed data.
+- Per-owner nonce enforcement prevents signature replay.
+- Deadline enforcement limits signature lifetime.
+- Receipt network is explicitly chain-gated by environment.
+- Slither security gate blocks CI on `MEDIUM` and `HIGH` severities.
+- The platform is an automated review layer, not a replacement for manual audits.
 
-## Environment Configuration
+See: `SecurityChecks.md`
 
-Environment configuration is organized by category:
+## Analysis pipeline
 
-- app runtime
-- database
-- redis/queue
-- rpc/chain
-- AI models
-- feature flags
-- timeout controls
-- secrets
+1. Source ingestion (snippet or verified contract source by address)
+2. Source normalization and validation
+3. Static analysis scanner stage (Slither when available, with fallback behavior)
+4. Structured contract context extraction
+5. AI audit stage
+6. Report assembly and persistence
 
-Use `.env.example` as the baseline and configure values for local, staging, or production runtime.
+Analysis runs asynchronously via worker queue mode or inline runtime mode, depending on deployment configuration.
 
-## Repository Structure
+## Supported inputs
+
+### Supported
+
+- Solidity code snippets
+- Verified Solidity contract source
+- Contract addresses on supported Base networks
+
+### Partial support
+
+- Multi-contract source bundles
+- Contracts with simple inheritance graphs
+
+### Not fully supported yet
+
+- Upgradeable proxy systems
+- Delegatecall-heavy architectures
+- Large multi-file protocol repositories
+- Assembly-heavy contracts
+
+## System architecture
+
+- **Web application**: submission UI, report UI, visibility controls, receipt flow, history
+- **API service**: analysis lifecycle, access control, history, receipt endpoints
+- **Analysis worker**: asynchronous pipeline execution
+- **Scanner engine**: Slither-backed static analysis stage
+- **AI audit stage**: model-based heuristic review
+- **Database**: users, sessions, analyses, reports, findings, receipts
+- **Receipt contract**: onchain report receipt registry on Base
+
+## Environment configuration
+
+Use `.env.example` as the baseline for local/staging/production configuration.
+
+## Repository structure
 
 ```text
 app/        Next.js app routes and API endpoints
@@ -166,4 +163,4 @@ docs/       project documentation
 
 ## License
 
-No repository-level license file is currently present.
+This project is licensed under the MIT License. See `LICENSE`.
