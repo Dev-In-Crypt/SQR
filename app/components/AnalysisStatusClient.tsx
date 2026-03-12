@@ -60,6 +60,53 @@ function activePhaseIndex(params: {
   return ANALYSIS_PHASES.length - 1;
 }
 
+function failurePhaseIndex(params: {
+  pipelineStage: AnalysisStatusResponse["pipelineStage"];
+  errorCode: string | null;
+}): number {
+  if (params.pipelineStage) {
+    const indexByStage: Record<Exclude<AnalysisStatusResponse["pipelineStage"], null>, number> = {
+      PREPARING_SOURCE: 0,
+      RUNNING_STATIC_SCANNER: 1,
+      EXTRACTING_CONTRACT_STRUCTURE: 2,
+      RUNNING_AI_AUDIT: 3,
+      GENERATING_REPORT: 4
+    };
+
+    return indexByStage[params.pipelineStage];
+  }
+
+  const code = (params.errorCode || "").toUpperCase();
+
+  if (
+    code.includes("SOURCE_") ||
+    code.startsWith("BASESCAN") ||
+    code.startsWith("SOURCIFY") ||
+    code === "INVALID_CHAIN" ||
+    code === "INVALID_ADDRESS"
+  ) {
+    return 0;
+  }
+
+  if (code.includes("COMPILATION") || code.includes("SLITHER") || code.includes("SOLC")) {
+    return 1;
+  }
+
+  if (code.includes("STRUCTURE")) {
+    return 2;
+  }
+
+  if (code.includes("AI_AUDIT")) {
+    return 3;
+  }
+
+  if (code.includes("REPORT") || code.includes("TIMEOUT")) {
+    return 4;
+  }
+
+  return 1;
+}
+
 export default function AnalysisStatusClient({ analysisId }: { analysisId: string }) {
   const [data, setData] = useState<AnalysisStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -208,21 +255,39 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
             <div className="stack progress-list">
               {ANALYSIS_PHASES.map((phase, index) => {
                 const terminal = isTerminalStatus(data.status);
+                const failedIndex =
+                  data.status === "FAILED"
+                    ? failurePhaseIndex({
+                        pipelineStage: data.pipelineStage,
+                        errorCode: data.errorCode
+                      })
+                    : null;
                 const isDone =
                   data.status === "COMPLETED" ||
                   data.status === "DONE_WITH_WARNINGS" ||
                   data.status === "PARTIAL"
                     ? true
+                    : data.status === "FAILED" && failedIndex !== null
+                      ? index < failedIndex
                     : index < phaseState.activeIndex;
                 const isActive =
-                  !terminal && (data.status === "QUEUED" || data.status === "RUNNING")
+                  data.status === "FAILED" && failedIndex !== null
+                    ? index === failedIndex
+                    : !terminal && (data.status === "QUEUED" || data.status === "RUNNING")
                     ? index === phaseState.activeIndex
                     : false;
+                const isFailed = data.status === "FAILED" && isActive;
 
                 return (
                   <div key={phase} className={`row progress-phase ${isDone ? "done" : isActive ? "active" : "pending"}`}>
                     <span className="progress-state" aria-hidden="true">
-                      {isDone ? "done" : isActive ? <span className="spinner" /> : "pending"}
+                      {isDone
+                        ? "done"
+                        : isFailed
+                          ? "failed"
+                          : isActive
+                            ? <span className="spinner" />
+                            : "pending"}
                     </span>
                     <span>{phase}</span>
                   </div>

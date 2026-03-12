@@ -61,7 +61,7 @@ const ANALYSIS_ERROR_TEMPLATES: Record<AnalysisErrorCategory, AnalysisErrorTempl
   COMPILATION_FAILURE: {
     title: "Compilation failure",
     message: "Source could not be compiled in the current analysis environment.",
-    hint: "Check pragma/import compatibility and retry."
+    hint: "Check pragma/import compatibility and retry. If the same source worked before, scanner runtime may be transient."
   },
   ANALYSIS_TIMEOUT: {
     title: "Analysis timeout",
