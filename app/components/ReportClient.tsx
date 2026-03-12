@@ -131,6 +131,196 @@ const SCANNER_SUMMARY_NOTES = [
 
 const DEFAULT_SCANNER_SUMMARY_NOTE_INDEX = 0;
 
+interface ScannerSummaryViewModel {
+  intro: string;
+  keyRisks: string[];
+  recommendations: string[];
+  closing: string;
+  paragraphs: string[];
+}
+
+function cleanSummaryText(value: string): string {
+  let text = normalizeSummaryText(value)
+    .replace(/\*\*/g, "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  for (let i = 0; i < 4; i += 1) {
+    const stripped = text.replace(/^(?:scanner summary|executive summary|summary)\s*:\s*/i, "").trim();
+    if (stripped === text) {
+      break;
+    }
+    text = stripped;
+  }
+
+  return text;
+}
+
+function splitSentences(value: string): string[] {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return [];
+  }
+
+  const matches = cleaned.match(/[^.!?]+[.!?]?/g);
+  return (matches || []).map((part) => part.trim()).filter(Boolean);
+}
+
+function parseListItems(value: string): string[] {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return [];
+  }
+
+  const numbered = compact.match(/\d+\.\s+[\s\S]*?(?=(?:\s+\d+\.\s+)|$)/g);
+  if (numbered && numbered.length > 0) {
+    return numbered
+      .map((item) => item.replace(/^\d+\.\s+/, "").trim())
+      .filter(Boolean);
+  }
+
+  const bulleted = compact.match(/(?:-|\*)\s+[\s\S]*?(?=(?:\s+(?:-|\*)\s+)|$)/g);
+  if (bulleted && bulleted.length > 0) {
+    return bulleted
+      .map((item) => item.replace(/^(?:-|\*)\s+/, "").trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function compactSentence(value: string, maxLength = 180): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const firstSentence = splitSentences(cleaned)[0] || cleaned;
+  if (firstSentence.length <= maxLength) {
+    return firstSentence;
+  }
+
+  return `${firstSentence.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function compactRisk(value: string): string {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return "";
+  }
+
+  const titled = cleaned.match(/^(.+?\([A-Z]+\s+severity\))/i);
+  if (titled?.[1]) {
+    return titled[1].trim();
+  }
+
+  return compactSentence(cleaned, 170);
+}
+
+function dedupeItems(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized) {
+      continue;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+}
+
+function inferRecommendations(text: string): string[] {
+  const actionStart =
+    /^(review|confirm|audit|restrict|validate|apply|use|avoid|consider|ensure|implement|add|verify)\b/i;
+
+  return dedupeItems(
+    splitSentences(text)
+      .filter((sentence) => actionStart.test(sentence))
+      .map((sentence) => compactSentence(sentence, 170))
+  );
+}
+
+function toParagraphs(value: string): string[] {
+  const sentences = splitSentences(value);
+  if (sentences.length === 0) {
+    return value.trim() ? [value.trim()] : [];
+  }
+
+  const paragraphs: string[] = [];
+  for (let index = 0; index < sentences.length; index += 2) {
+    paragraphs.push(sentences.slice(index, index + 2).join(" "));
+  }
+
+  return paragraphs.slice(0, 4);
+}
+
+function formatScannerSummary(value: string): ScannerSummaryViewModel {
+  const text = cleanSummaryText(value);
+  if (!text) {
+    return {
+      intro: "",
+      keyRisks: [],
+      recommendations: [],
+      closing: "",
+      paragraphs: []
+    };
+  }
+
+  const overallMatch = text.match(/\bOverall\s*:\s*([\s\S]*)$/i);
+  const closing = overallMatch?.[1] ? compactSentence(overallMatch[1], 240) : "";
+  const textBeforeOverall = overallMatch ? text.slice(0, overallMatch.index).trim() : text;
+
+  const recommendationMatch = textBeforeOverall.match(/\bRecommendations?\s*:\s*([\s\S]*)$/i);
+  const recommendationSection = recommendationMatch?.[1]?.trim() || "";
+  const textBeforeRecommendations = recommendationMatch
+    ? textBeforeOverall.slice(0, recommendationMatch.index).trim()
+    : textBeforeOverall;
+
+  const firstNumbered = textBeforeRecommendations.match(/(?:^|\s)\d+\.\s+/);
+  const firstNumberedIndex = firstNumbered
+    ? firstNumbered.index ?? textBeforeRecommendations.indexOf(firstNumbered[0])
+    : -1;
+
+  const intro = compactSentence(
+    firstNumberedIndex >= 0
+      ? textBeforeRecommendations.slice(0, firstNumberedIndex).trim()
+      : textBeforeRecommendations,
+    240
+  );
+
+  const riskSection = firstNumberedIndex >= 0 ? textBeforeRecommendations.slice(firstNumberedIndex).trim() : "";
+
+  const keyRisks = dedupeItems(parseListItems(riskSection).map((item) => compactRisk(item))).slice(0, 4);
+  const recommendations = dedupeItems(
+    [
+      ...parseListItems(recommendationSection).map((item) => compactSentence(item, 170)),
+      ...inferRecommendations(text)
+    ].filter(Boolean)
+  ).slice(0, 5);
+
+  const shouldUseParagraphFallback = keyRisks.length === 0 && recommendations.length === 0;
+
+  return {
+    intro,
+    keyRisks,
+    recommendations,
+    closing,
+    paragraphs: shouldUseParagraphFallback ? toParagraphs(text) : []
+  };
+}
+
 function displayInputType(metadataInputType: string, contractAddress?: string): string {
   if (metadataInputType === "PASTE_CODE") {
     return "Snippet";
@@ -302,12 +492,18 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     };
   }, [data]);
 
-  const summaryText = useMemo(() => {
+  const summaryView = useMemo(() => {
     if (!data) {
-      return "";
+      return {
+        intro: "",
+        keyRisks: [],
+        recommendations: [],
+        closing: "",
+        paragraphs: []
+      } as ScannerSummaryViewModel;
     }
 
-    return normalizeSummaryText(data.report.scannerSummary || data.report.executiveSummary);
+    return formatScannerSummary(data.report.scannerSummary || data.report.executiveSummary);
   }, [data]);
 
   async function copyHash() {
@@ -622,7 +818,36 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             <div className="stack">
               <h2 style={{ margin: 0 }}>Scanner Summary</h2>
-              <p>{summaryText}</p>
+              {summaryView.paragraphs.length > 0
+                ? summaryView.paragraphs.map((paragraph, index) => <p key={`summary-paragraph-${index}`}>{paragraph}</p>)
+                : null}
+
+              {summaryView.paragraphs.length === 0 && summaryView.intro ? <p>{summaryView.intro}</p> : null}
+
+              {summaryView.keyRisks.length > 0 ? (
+                <div className="scanner-summary-group">
+                  <strong>Key Risks</strong>
+                  <ul className="scanner-summary-list">
+                    {summaryView.keyRisks.map((risk, index) => (
+                      <li key={`risk-${index}`}>{risk}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {summaryView.recommendations.length > 0 ? (
+                <div className="scanner-summary-group">
+                  <strong>Recommendations</strong>
+                  <ul className="scanner-summary-list">
+                    {summaryView.recommendations.map((recommendation, index) => (
+                      <li key={`recommendation-${index}`}>{recommendation}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {summaryView.paragraphs.length === 0 && summaryView.closing ? <p>{summaryView.closing}</p> : null}
+
               <p className="muted">
                 {SCANNER_SUMMARY_NOTES[Math.min(DEFAULT_SCANNER_SUMMARY_NOTE_INDEX, SCANNER_SUMMARY_NOTES.length - 1)]}
               </p>
@@ -672,9 +897,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             <div className="card stack">
               <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
               <div>txHash: {data.receipt.txHash}</div>
-              <div>receiptId: {data.receipt.receiptId}</div>
-              <div>owner: {data.receipt.receiptOwner}</div>
-              <div>minter: {data.receipt.receiptMinter}</div>
+              <div>minter (tx sender): {data.receipt.receiptMinter}</div>
               <Link href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
                 Open receipt details
               </Link>

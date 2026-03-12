@@ -1228,6 +1228,23 @@ main > section.stack.page-container {
   margin: 10px 0;
 }
 
+.scanner-summary-group {
+  display: grid;
+  gap: 8px;
+}
+
+.scanner-summary-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.scanner-summary-list li::marker {
+  color: rgba(255, 183, 0, 0.82);
+}
+
 .progress-list {
   gap: 8px;
 }

@@ -70,13 +70,7 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
               <strong>txHash:</strong> {data.receipt.txHash}
             </div>
             <div>
-              <strong>receiptId:</strong> {data.receipt.receiptId}
-            </div>
-            <div>
               <strong>contractAddress:</strong> {data.receipt.contractAddress}
-            </div>
-            <div>
-              <strong>owner (signed):</strong> {data.receipt.receiptOwner}
             </div>
             <div>
               <strong>minter (tx sender):</strong> {data.receipt.receiptMinter}
