@@ -8,7 +8,7 @@ export default async function AnalysisPage({
   const { analysisId } = await params;
 
   return (
-    <section className="stack">
+    <section className="stack page-container">
       <div className="card">
         <h1>Analysis Status</h1>
         <p className="muted">analysisId: {analysisId}</p>

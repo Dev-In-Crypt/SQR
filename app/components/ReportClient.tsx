@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 
 import { providerErrorCode } from "@/lib/eip1193";
-import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { receiptRegistryAbi } from "@/lib/receipt-shared";
 import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
 import { EnsureChainError, ensureChain, readWalletChainHex } from "@/lib/wallet-chain";
@@ -160,30 +159,12 @@ function normalizeSummaryText(value: string): string {
     .replace(/adheres to best practices/gi, "matches patterns reviewed in the current automated scope");
 }
 
-function chainHexToNumber(chainHex: string): number {
-  return Number.parseInt(chainHex, 16);
-}
-
-function formatWalletChain(chainHex: string | null): string {
-  if (!chainHex) {
-    return "unavailable";
-  }
-
-  const chainId = chainHexToNumber(chainHex);
-  if (Number.isNaN(chainId)) {
-    return chainHex;
-  }
-
-  return `${chainHex} / ${chainId}`;
-}
-
 export default function ReportClient({ reportId, token }: { reportId: string; token: string | null }) {
   const [data, setData] = useState<ReportApiResponse | null>(null);
-  const [severityFilter, setSeverityFilter] = useState<"ALL" | Severity>("ALL");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
-  const [walletChainHex, setWalletChainHex] = useState<string | null>(null);
+  const [, setWalletChainHex] = useState<string | null>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfigResponse["receipt"] | null>(null);
   const [mintPayload, setMintPayload] = useState<{
     to: Address;
@@ -303,12 +284,8 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       return [];
     }
 
-    return data.report.findings.filter((finding) =>
-      severityFilter === "ALL" ? true : finding.severity === severityFilter
-    );
-  }, [data, severityFilter]);
-
-  const totalFindings = data?.report.findings.length ?? 0;
+    return data.report.findings;
+  }, [data]);
 
   const coverage = useMemo(() => {
     if (!data) {
@@ -651,26 +628,6 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </p>
             </div>
 
-            {totalFindings > 0 ? (
-              <div className="row">
-                <label>
-                  Severity filter:
-                  <select
-                    className="select"
-                    value={severityFilter}
-                    onChange={(event) => setSeverityFilter(event.target.value as "ALL" | Severity)}
-                  >
-                    <option value="ALL">ALL</option>
-                    <option value="CRITICAL">CRITICAL</option>
-                    <option value="HIGH">HIGH</option>
-                    <option value="MEDIUM">MEDIUM</option>
-                    <option value="LOW">LOW</option>
-                    <option value="INFO">INFO</option>
-                  </select>
-                </label>
-              </div>
-            ) : null}
-
             {data.isOwner ? (
               <div className="stack">
                 <hr className="divider" />
@@ -709,23 +666,6 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </div>
             ) : null}
 
-            <details className="card">
-              <summary style={{ cursor: "pointer", fontWeight: 700 }}>Technical details</summary>
-              <div className="stack" style={{ marginTop: 10 }}>
-                <div className="muted">reportId: {data.reportId}</div>
-                <div className="muted">reportHash: {data.reportHash}</div>
-                <div className="muted">generatedAt: {new Date(data.report.metadata.generatedAt).toLocaleString()}</div>
-                <div className="muted">inputType: {data.report.metadata.inputType}</div>
-                <div className="muted">chainId: {data.report.metadata.chainId}</div>
-                <div className="muted">visibility: {data.visibility}</div>
-                {runtimeConfig ? (
-                  <div className="muted">
-                    requiredNetwork: {runtimeConfig.requiredNetworkLabel} ({runtimeConfig.requiredChainId})
-                  </div>
-                ) : null}
-                <div className="muted">walletNetwork: {formatWalletChain(walletChainHex)}</div>
-              </div>
-            </details>
           </div>
 
           {data.receipt ? (
@@ -744,7 +684,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           <div className="card stack">
             <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
             {findings.length === 0 ? (
-              <div>No findings were identified within the current automated review scope for this filter.</div>
+              <div>No findings were identified within the current automated review scope.</div>
             ) : null}
 
             {findings.map((finding) => (
@@ -808,29 +748,6 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             ))}
           </div>
 
-          {data.isOwner &&
-          (data.report.warnings.length > 0 ||
-            data.report.scannerErrors.length > 0 ||
-            data.report.partialReasons.length > 0) ? (
-            <div className="card stack">
-              <h3 style={{ margin: 0 }}>Analysis Notes</h3>
-              {data.report.warnings.map((item, idx) => (
-                <div key={`warn-${idx}`} className="muted">
-                  warning: {describeAnalysisNote(item)}
-                </div>
-              ))}
-              {data.report.scannerErrors.map((item, idx) => (
-                <div key={`err-${idx}`} className="muted">
-                  scannerError: {item}
-                </div>
-              ))}
-              {data.report.partialReasons.map((item, idx) => (
-                <div key={`reason-${idx}`} className="muted">
-                  note: {describeAnalysisNote(item)}
-                </div>
-              ))}
-            </div>
-          ) : null}
         </>
       ) : null}
 

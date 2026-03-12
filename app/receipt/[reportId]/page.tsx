@@ -11,7 +11,7 @@ export default async function ReceiptPage({
   const { token } = await searchParams;
 
   return (
-    <section className="stack">
+    <section className="stack page-container">
       <ReceiptClient reportId={reportId} token={token ?? null} />
     </section>
   );

@@ -165,10 +165,7 @@ export default function HomeForm() {
         );
       }
 
-      const analysisWindow = window.open(`/analysis/${json.analysisId}`, "_blank", "noopener,noreferrer");
-      if (!analysisWindow) {
-        window.location.href = `/analysis/${json.analysisId}`;
-      }
+      window.location.href = `/analysis/${json.analysisId}`;
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     } finally {
