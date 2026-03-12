@@ -8,7 +8,14 @@ import { prisma } from "@/lib/db";
 import { logError, logInfo } from "@/lib/logger";
 import { cachePrivateToken } from "@/lib/request-context";
 import { runStaticScan } from "@/lib/scanner";
-import type { AnalysisStatus, Finding, PipelineStage, SnippetCompleteness, SourceBundle } from "@/lib/types";
+import type {
+  AnalysisStatus,
+  Finding,
+  PipelineStage,
+  ScannerOutput,
+  SnippetCompleteness,
+  SourceBundle
+} from "@/lib/types";
 
 async function setPipelineStage(analysisId: string, stage: PipelineStage): Promise<void> {
   await prisma.analysisRequest.update({
@@ -45,13 +52,141 @@ function hasCompilationDiagnostic(diagnostics: string[]): boolean {
   return diagnostics.some((item) => {
     const normalized = item.toLowerCase();
     return (
-      normalized.includes("compilation") ||
-      normalized.includes("parsererror") ||
-      normalized.includes("solc") ||
+      normalized.includes("parsererror:") ||
+      normalized.includes("typeerror:") ||
+      normalized.includes("declarationerror:") ||
+      normalized.includes("syntaxerror:") ||
+      normalized.includes("compilation failed") ||
+      normalized.includes("error: source") ||
       normalized.includes("source file not found") ||
       normalized.includes("file not found")
     );
   });
+}
+
+function hasScannerInfraDiagnostic(diagnostics: string[]): boolean {
+  return diagnostics.some((item) => {
+    const normalized = item.toLowerCase();
+
+    return (
+      normalized.includes("spawn slither enoent") ||
+      normalized.includes("spawn solc enoent") ||
+      normalized.includes("command not found") ||
+      normalized.includes("slither_skipped_solc_missing") ||
+      normalized.includes("solc_select_unavailable") ||
+      normalized.includes("solc_path does not exist") ||
+      normalized.includes("solc_fallback_path does not exist") ||
+      normalized.includes("http request failed") ||
+      normalized.includes("fetch failed") ||
+      normalized.includes("network") ||
+      normalized.includes("connection")
+    );
+  });
+}
+
+function dedupeStrings(items: string[]): string[] {
+  return [...new Set(items.filter((item) => item.trim().length > 0))];
+}
+
+function stripCommentsAndStrings(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/.*$/gm, " ")
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, "''");
+}
+
+function isSingleFileWithoutImports(sourceBundle: SourceBundle): boolean {
+  if (sourceBundle.files.length !== 1) {
+    return false;
+  }
+
+  const onlyFile = sourceBundle.files[0];
+  const sanitized = stripCommentsAndStrings(onlyFile.content);
+  return !/^\s*import\s+/m.test(sanitized);
+}
+
+function summarizeDiagnostics(diagnostics: string[]): string {
+  const compact = dedupeStrings(diagnostics)
+    .slice(0, 3)
+    .join(" | ");
+
+  if (!compact) {
+    return "no scanner diagnostics captured";
+  }
+
+  if (compact.length > 900) {
+    return `${compact.slice(0, 897)}...`;
+  }
+
+  return compact;
+}
+
+async function runStaticScanWithRetry(params: {
+  sourceBundle: SourceBundle;
+  isSnippetInput: boolean;
+}): Promise<ScannerOutput> {
+  const primaryScan = await runStaticScan(params.sourceBundle, {
+    skipSlither: false,
+    scanMode: params.isSnippetInput ? "snippet" : "project",
+    slitherRequired: !params.isSnippetInput
+  });
+
+  if (params.isSnippetInput) {
+    return primaryScan;
+  }
+
+  const primaryHasCompilationFailure =
+    primaryScan.scannerErrors.length > 0 && hasCompilationDiagnostic(primaryScan.scannerErrors);
+
+  if (!primaryHasCompilationFailure) {
+    return primaryScan;
+  }
+
+  const fallbackScan = await runStaticScan(params.sourceBundle, {
+    skipSlither: false,
+    scanMode: "snippet",
+    slitherRequired: true
+  });
+
+  const fallbackHasCompilationFailure =
+    fallbackScan.scannerErrors.length > 0 && hasCompilationDiagnostic(fallbackScan.scannerErrors);
+
+  if (!fallbackHasCompilationFailure) {
+    const shouldShowRetryWarning = !isSingleFileWithoutImports(params.sourceBundle);
+    return {
+      ...fallbackScan,
+      warnings: shouldShowRetryWarning
+        ? dedupeStrings([...fallbackScan.warnings, "SLITHER_PROJECT_MODE_RETRY_SUCCEEDED"])
+        : fallbackScan.warnings
+    };
+  }
+
+  const combinedDiagnostics = [
+    ...primaryScan.scannerErrors,
+    ...fallbackScan.scannerErrors,
+    ...primaryScan.warnings,
+    ...fallbackScan.warnings
+  ];
+
+  const likelyInfraFailure =
+    hasTimeoutDiagnostic(combinedDiagnostics) || hasScannerInfraDiagnostic(combinedDiagnostics);
+
+  if (likelyInfraFailure) {
+    return {
+      findings: fallbackScan.findings.length > 0 ? fallbackScan.findings : primaryScan.findings,
+      scannerErrors: dedupeStrings([...primaryScan.scannerErrors, ...fallbackScan.scannerErrors]),
+      warnings: dedupeStrings([
+        ...primaryScan.warnings,
+        ...fallbackScan.warnings,
+        "SLITHER_PROJECT_MODE_RETRY_INFRA_FAILURE"
+      ])
+    };
+  }
+
+  throw new Error(
+    `COMPILATION_FAILED:${summarizeDiagnostics([...primaryScan.scannerErrors, ...fallbackScan.scannerErrors])}`
+  );
 }
 
 async function runWithStageTimeout<T>(params: {
@@ -251,18 +386,19 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
 
     await setPipelineStage(analysis.id, "RUNNING_STATIC_SCANNER");
 
-    const staticScan = await runStaticScan(sourceBundle, {
-      skipSlither: isSnippetIncomplete,
-      scanMode: isSnippetInput ? "snippet" : "project",
-      slitherRequired: !isSnippetInput
-    });
+    const staticScan = isSnippetIncomplete
+      ? await runStaticScan(sourceBundle, {
+          skipSlither: true,
+          scanMode: "snippet",
+          slitherRequired: false
+        })
+      : await runStaticScanWithRetry({
+          sourceBundle,
+          isSnippetInput
+        });
 
     if (hasTimeoutDiagnostic(staticScan.scannerErrors) || hasTimeoutDiagnostic(staticScan.warnings)) {
       throw new AnalysisTimeoutError("scanner_stage", config.SCANNER_TIMEOUT_MS);
-    }
-
-    if (!isSnippetInput && staticScan.scannerErrors.length > 0 && hasCompilationDiagnostic(staticScan.scannerErrors)) {
-      throw new Error("COMPILATION_FAILED");
     }
 
     assertWithinTotalTimeout(startedAt, "post_scanner");

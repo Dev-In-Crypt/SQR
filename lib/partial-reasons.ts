@@ -22,6 +22,10 @@ const WARNING_TEXT: Record<string, string> = {
     "Slither standalone scan was skipped because solc was not available via SOLC_PATH or PATH.",
   SLITHER_SOLC_VERSION_UNRESOLVED:
     "No compatible local solc version was found for the source pragma; Slither used fallback compiler settings.",
+  SLITHER_PROJECT_MODE_RETRY_SUCCEEDED:
+    "Initial project-mode scanner compilation failed; standalone retry succeeded and analysis continued.",
+  SLITHER_PROJECT_MODE_RETRY_INFRA_FAILURE:
+    "Scanner compilation failed in both project and standalone retries due to likely runtime/tooling issues.",
   SLITHER_SKIPPED_NOT_APPLICABLE:
     "Slither scan was skipped because it is not applicable for this input."
 };
