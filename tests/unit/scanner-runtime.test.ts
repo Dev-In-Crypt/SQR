@@ -43,14 +43,17 @@ function createRuntimeHarness(
 
 function makeSourceBundle(params: {
   inputType: SourceBundle["inputType"];
-  path: string;
-  content: string;
+  path?: string;
+  content?: string;
+  files?: Array<{ path: string; content: string }>;
 }): SourceBundle {
+  const files = params.files ?? [{ path: params.path ?? "PastedSnippet.sol", content: params.content ?? "" }];
+
   return {
     inputType: params.inputType,
     chainId: 8453,
-    files: [{ path: params.path, content: params.content }],
-    lineCount: params.content.split("\n").length,
+    files,
+    lineCount: files.reduce((total, file) => total + file.content.split("\n").length, 0),
     isVerifiedSource: params.inputType === "BASE_ADDRESS",
     sourceMeta: {},
     sourceHash: "0xunit-test-hash"
@@ -333,5 +336,119 @@ describe("scanner runtime modes", () => {
     const standaloneSlitherCall = standaloneHarness.calls.find((item) => item.command === "slither");
     expect(standaloneHarness.calls.some((item) => item.command === "solc")).toBe(true);
     expect(standaloneSlitherCall?.args).toContain("solc");
+  });
+
+  it("standalone mode forwards auto-derived remappings for alias imports", async () => {
+    const harness = createRuntimeHarness(async (call) => {
+      if (call.command === "solc") {
+        return { code: 0, stdout: "solc ok", stderr: "" };
+      }
+
+      if (call.command === "slither") {
+        const jsonArgIndex = call.args.indexOf("--json");
+        const outputPath = call.args[jsonArgIndex + 1];
+        await writeFile(outputPath, JSON.stringify({ success: true, results: { detectors: [] } }), "utf8");
+        return { code: 0, stdout: "", stderr: "" };
+      }
+
+      return { code: 1, stdout: "", stderr: "unexpected command" };
+    });
+
+    const bundle = makeSourceBundle({
+      inputType: "BASE_ADDRESS",
+      files: [
+        {
+          path: "src/ClankerToken.sol",
+          content: [
+            "// SPDX-License-Identifier: MIT",
+            "pragma solidity ^0.8.28;",
+            'import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";',
+            'import {Predeploys} from "@contracts-bedrock/src/libraries/Predeploys.sol";',
+            "contract ClankerToken is ERC20 {",
+            "  constructor() ERC20('T','T') {}",
+            "}"
+          ].join("\n")
+        },
+        {
+          path: "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol",
+          content: [
+            "// SPDX-License-Identifier: MIT",
+            "pragma solidity ^0.8.28;",
+            "contract ERC20 {",
+            "  constructor(string memory, string memory) {}",
+            "}"
+          ].join("\n")
+        },
+        {
+          path: "lib/optimism/packages/contracts-bedrock/src/libraries/Predeploys.sol",
+          content: [
+            "// SPDX-License-Identifier: MIT",
+            "pragma solidity ^0.8.28;",
+            "library Predeploys {",
+            "  address internal constant PLACEHOLDER = address(0);",
+            "}"
+          ].join("\n")
+        }
+      ]
+    });
+
+    const result = await runStaticScan(bundle, {
+      scanMode: "project",
+      slitherRequired: true,
+      runtime: harness.runtime
+    });
+
+    const slitherCall = harness.calls.find((item) => item.command === "slither");
+    expect(slitherCall).toBeTruthy();
+    expect(slitherCall?.args).toContain("--solc-remaps");
+    const remapValue =
+      slitherCall?.args[(slitherCall.args.indexOf("--solc-remaps") ?? -1) + 1] ?? "";
+    expect(remapValue).toContain("@openzeppelin/=lib/openzeppelin-contracts/");
+    expect(remapValue).toContain("@contracts-bedrock/=lib/optimism/packages/contracts-bedrock/");
+    expect(result.scannerErrors).toEqual([]);
+  });
+
+  it("standalone mode does not inject remappings without a matching bundle path", async () => {
+    const harness = createRuntimeHarness(async (call) => {
+      if (call.command === "solc") {
+        return { code: 0, stdout: "solc ok", stderr: "" };
+      }
+
+      if (call.command === "slither") {
+        const jsonArgIndex = call.args.indexOf("--json");
+        const outputPath = call.args[jsonArgIndex + 1];
+        await writeFile(outputPath, JSON.stringify({ success: true, results: { detectors: [] } }), "utf8");
+        return { code: 0, stdout: "", stderr: "" };
+      }
+
+      return { code: 1, stdout: "", stderr: "unexpected command" };
+    });
+
+    const bundle = makeSourceBundle({
+      inputType: "BASE_ADDRESS",
+      files: [
+        {
+          path: "src/NoRemap.sol",
+          content: [
+            "// SPDX-License-Identifier: MIT",
+            "pragma solidity ^0.8.28;",
+            'import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";',
+            "contract NoRemap {}"
+          ].join("\n")
+        }
+      ]
+    });
+
+    await runStaticScan(bundle, {
+      scanMode: "project",
+      slitherRequired: true,
+      runtime: harness.runtime
+    });
+
+    const slitherCall = harness.calls.find((item) => item.command === "slither");
+    const remapFlagCount = slitherCall?.args.filter((item) => item === "--solc-remaps").length ?? 0;
+
+    expect(slitherCall).toBeTruthy();
+    expect(remapFlagCount).toBe(0);
   });
 });

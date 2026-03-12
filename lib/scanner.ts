@@ -229,6 +229,80 @@ function normalizeWorkspaceRelativePath(rawPath: string | undefined, index: numb
   return candidate;
 }
 
+function normalizePathForRemapping(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\//, "");
+}
+
+function stripComments(code: string): string {
+  return code
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/.*$/gm, " ");
+}
+
+function extractImportPaths(files: SourceBundle["files"]): string[] {
+  const imports = new Set<string>();
+
+  for (const file of files) {
+    const sanitized = stripComments(file.content);
+    const regex = /\bimport\s+(?:[^"']*?from\s+)?["']([^"']+)["']/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(sanitized)) !== null) {
+      const candidate = match[1]?.trim();
+      if (!candidate) {
+        continue;
+      }
+      if (candidate.startsWith(".") || candidate.startsWith("/")) {
+        continue;
+      }
+      imports.add(normalizePathForRemapping(candidate));
+    }
+  }
+
+  return [...imports];
+}
+
+function buildSolcRemappings(sourceBundle: SourceBundle): string[] {
+  const filePaths = sourceBundle.files.map((file) => normalizePathForRemapping(file.path));
+  const importPaths = extractImportPaths(sourceBundle.files);
+  const remaps = new Map<string, string>();
+
+  for (const importPath of importPaths) {
+    const slashIndex = importPath.indexOf("/");
+    if (slashIndex <= 0) {
+      continue;
+    }
+
+    const aliasRoot = importPath.slice(0, slashIndex);
+    const remainder = importPath.slice(slashIndex + 1);
+    if (!remainder) {
+      continue;
+    }
+
+    const matchingFile = filePaths.find((path) => path.endsWith(remainder));
+    if (!matchingFile) {
+      continue;
+    }
+
+    const targetRoot = matchingFile.slice(0, matchingFile.length - remainder.length);
+    if (!targetRoot) {
+      continue;
+    }
+
+    const alias = aliasRoot.endsWith("/") ? aliasRoot : `${aliasRoot}/`;
+    const target = targetRoot.endsWith("/") ? targetRoot : `${targetRoot}/`;
+
+    const existing = remaps.get(alias);
+    if (!existing || target.length < existing.length) {
+      remaps.set(alias, target);
+    }
+  }
+
+  return [...remaps.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([alias, target]) => `${alias}=${target}`);
+}
+
 async function pathExists(path: string): Promise<boolean> {
   try {
     await access(path, fsConstants.F_OK);
@@ -543,12 +617,14 @@ async function runSlither(params: {
       void solcVersion;
     }
     outputPath = join(plan.cwd, `slither-output-${randomUUID()}.json`);
+    const solcRemaps = plan.standalone ? buildSolcRemappings(params.sourceBundle) : [];
     const slitherArgs = [
       plan.entryPoint,
       "--json",
       outputPath,
       "--json-types",
       "detectors",
+      "--fail-none",
       "--detect",
       SLITHER_DETECTORS.join(","),
       "--exclude-dependencies",
@@ -557,6 +633,10 @@ async function runSlither(params: {
     ];
     if (plan.standalone && solcResolution) {
       slitherArgs.push("--solc", solcResolution.resolvedBinaryPath);
+      slitherArgs.push("--solc-disable-warnings");
+      if (solcRemaps.length > 0) {
+        slitherArgs.push("--solc-remaps", solcRemaps.join(" "));
+      }
     }
 
     const slitherEnv =
