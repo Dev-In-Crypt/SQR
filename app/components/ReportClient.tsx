@@ -123,6 +123,14 @@ interface RuntimeConfigResponse {
   };
 }
 
+interface ConfirmPayload {
+  txHash: string;
+  owner: Address;
+  nonce: string;
+  deadline: string;
+  signature: Hex;
+}
+
 const SCANNER_SUMMARY_NOTES = [
   "Automated analysis did not identify issues within the current scan scope. Additional manual review can provide deeper context.",
   "No issues were identified within the automated analysis scope for this input. Independent review may add further validation.",
@@ -365,6 +373,139 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     deadline: string;
   } | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
+
+  function isLikelyInvalidNonceError(error: unknown): boolean {
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    return message.includes("invalidnonce") || message.includes("invalid nonce");
+  }
+
+  async function waitForWalletReceipt(txHash: string, timeoutMs = 120_000): Promise<void> {
+    if (!window.ethereum) {
+      return;
+    }
+
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const receipt = (await window.ethereum.request({
+        method: "eth_getTransactionReceipt",
+        params: [txHash]
+      })) as { status?: string } | null;
+
+      if (receipt) {
+        if (receipt.status === "0x0") {
+          throw new Error("Mint transaction reverted onchain. Please refresh mint authorization and retry.");
+        }
+
+        return;
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1500);
+      });
+    }
+
+    throw new Error("Mint transaction is still pending. Please wait, then retry confirmation.");
+  }
+
+  async function confirmMintWithRetry(payload: ConfirmPayload): Promise<void> {
+    const maxAttempts = 8;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const confirmResp = await fetch(`/api/v1/receipt/${reportId}/confirm`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const confirmJson = (await confirmResp.json()) as {
+        error?: { code?: string; message?: string };
+      };
+
+      if (confirmResp.ok) {
+        return;
+      }
+
+      const code = confirmJson.error?.code;
+      const canRetry = code === "TX_NOT_FOUND_REQUIRED_NETWORK" || code === "MINT_EVENT_NOT_FOUND";
+      if (canRetry && attempt < maxAttempts) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1500);
+        });
+        continue;
+      }
+
+      throw new Error(
+        resolveUserErrorMessage({
+          code,
+          fallbackMessage: confirmJson.error?.message,
+          defaultMessage: "Receipt confirmation failed"
+        })
+      );
+    }
+  }
+
+  async function signAndSendPreparedMint(params: {
+    prepared: PreparedReceiptResponse;
+    from: Address;
+    ensureRequiredChain: () => Promise<void>;
+    provider: NonNullable<typeof window.ethereum>;
+  }): Promise<ConfirmPayload> {
+    const { prepared, from, ensureRequiredChain, provider } = params;
+
+    await ensureRequiredChain();
+
+    const signature = (await provider.request({
+      method: "eth_signTypedData_v4",
+      params: [from, JSON.stringify(prepared.typedData)]
+    })) as Hex;
+
+    const data = encodeFunctionData({
+      abi: receiptRegistryAbi,
+      functionName: "mintWithSig",
+      args: [
+        prepared.call!.args.reportHash,
+        prepared.call!.args.contractAddress,
+        prepared.call!.args.analyzerVersionHash,
+        prepared.call!.args.owner,
+        BigInt(prepared.call!.args.nonce),
+        BigInt(prepared.call!.args.deadline),
+        signature
+      ]
+    });
+
+    setMintPayload({
+      to: prepared.call!.to,
+      data,
+      chainId: prepared.call!.chainId,
+      owner: prepared.call!.args.owner,
+      nonce: prepared.call!.args.nonce,
+      deadline: prepared.call!.args.deadline
+    });
+
+    await ensureRequiredChain();
+
+    const txHash = (await provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from,
+          to: prepared.call!.to,
+          data
+        }
+      ]
+    })) as string;
+
+    return {
+      txHash,
+      owner: prepared.call!.args.owner,
+      nonce: prepared.call!.args.nonce,
+      deadline: prepared.call!.args.deadline,
+      signature
+    };
+  }
 
   async function loadReport() {
     setError(null);
@@ -662,75 +803,67 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         ensurePreparedChainMatchesRequired(prepared, required);
       }
 
-      await ensureRequiredChain();
+      let signedMint: ConfirmPayload;
+      try {
+        signedMint = await signAndSendPreparedMint({
+          prepared,
+          from,
+          ensureRequiredChain,
+          provider
+        });
+      } catch (sendError) {
+        if (!isLikelyInvalidNonceError(sendError)) {
+          throw sendError;
+        }
 
-      const signature = (await provider.request({
-        method: "eth_signTypedData_v4",
-        params: [from, JSON.stringify(prepared.typedData)]
-      })) as Hex;
+        const refreshed = await fetchPreparedMint();
+        if (refreshed.existing) {
+          await loadReport();
+          return;
+        }
 
-      const data = encodeFunctionData({
-        abi: receiptRegistryAbi,
-        functionName: "mintWithSig",
-        args: [
-          prepared.call!.args.reportHash,
-          prepared.call!.args.contractAddress,
-          prepared.call!.args.analyzerVersionHash,
-          prepared.call!.args.owner,
-          BigInt(prepared.call!.args.nonce),
-          BigInt(prepared.call!.args.deadline),
-          signature
-        ]
-      });
+        ensurePreparedChainMatchesRequired(refreshed, required);
+        if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
+          throw new Error("Connected wallet does not match prepared owner");
+        }
 
-      setMintPayload({
-        to: prepared.call!.to,
-        data,
-        chainId: prepared.call!.chainId,
-        owner: prepared.call!.args.owner,
-        nonce: prepared.call!.args.nonce,
-        deadline: prepared.call!.args.deadline
-      });
+        signedMint = await signAndSendPreparedMint({
+          prepared: refreshed,
+          from,
+          ensureRequiredChain,
+          provider
+        });
+      }
 
-      await ensureRequiredChain();
+      await waitForWalletReceipt(signedMint.txHash);
 
-      const txHash = (await provider.request({
-        method: "eth_sendTransaction",
-        params: [
-          {
-            from,
-            to: prepared.call!.to,
-            data
-          }
-        ]
-      })) as string;
+      try {
+        await confirmMintWithRetry(signedMint);
+      } catch (confirmError) {
+        if (!isLikelyInvalidNonceError(confirmError)) {
+          throw confirmError;
+        }
 
-      const confirmResp = await fetch(`/api/v1/receipt/${reportId}/confirm`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          txHash,
-          owner: prepared.call!.args.owner,
-          nonce: prepared.call!.args.nonce,
-          deadline: prepared.call!.args.deadline,
-          signature
-        })
-      });
+        const refreshed = await fetchPreparedMint();
+        if (refreshed.existing) {
+          await loadReport();
+          return;
+        }
 
-      const confirmJson = (await confirmResp.json()) as {
-        error?: { code?: string; message?: string };
-      };
+        ensurePreparedChainMatchesRequired(refreshed, required);
+        if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
+          throw new Error("Connected wallet does not match prepared owner");
+        }
 
-      if (!confirmResp.ok) {
-        throw new Error(
-          resolveUserErrorMessage({
-            code: confirmJson.error?.code,
-            fallbackMessage: confirmJson.error?.message,
-            defaultMessage: "Receipt confirmation failed"
-          })
-        );
+        signedMint = await signAndSendPreparedMint({
+          prepared: refreshed,
+          from,
+          ensureRequiredChain,
+          provider
+        });
+
+        await waitForWalletReceipt(signedMint.txHash);
+        await confirmMintWithRetry(signedMint);
       }
 
       await loadReport();
@@ -748,6 +881,11 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       }
 
       const message = actionError instanceof Error ? actionError.message : String(actionError);
+
+      if (isLikelyInvalidNonceError(actionError)) {
+        setError("Nonce mismatch detected. Mint payload was refreshed; please retry once.");
+        return;
+      }
 
       if (message.toLowerCase().includes("expired")) {
         try {
