@@ -26,7 +26,11 @@ const monoFont = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Solidity Quick Review",
-  description: "Fast Solidity risk review with deterministic report hash and optional Base receipt"
+  description: "Fast Solidity risk review with deterministic report hash and optional Base receipt",
+  icons: {
+    icon: [{ url: "/favicon.ico" }, { url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.ico"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
