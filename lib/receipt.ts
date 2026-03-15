@@ -198,6 +198,68 @@ export async function prepareMintAuthorization(params: {
   };
 }
 
+export async function readMintedReceiptByHash(reportHash: string): Promise<
+  | { exists: false }
+  | {
+      exists: true;
+      receiptId: string;
+      owner: string;
+      contractAddress: string;
+      analyzerVersionHash: string;
+      timestamp: Date;
+    }
+> {
+  const receiptContract = configuredReceiptContract();
+  const client = requiredChainClient();
+
+  try {
+    const result = await client.readContract({
+      address: receiptContract,
+      abi: receiptRegistryAbi,
+      functionName: "getByHash",
+      args: [reportHash as Hex]
+    });
+
+    return {
+      exists: true,
+      receiptId: result[0].toString(),
+      owner: result[1],
+      contractAddress: result[2],
+      analyzerVersionHash: result[3],
+      timestamp: new Date(Number(result[4]) * 1000)
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    if (message.includes("receipt_not_found")) {
+      return { exists: false };
+    }
+
+    if (
+      message.includes("returned no data") ||
+      message.includes("does not have the function") ||
+      message.includes("address is not a contract")
+    ) {
+      throw new ApiError(
+        503,
+        "RECEIPT_CONTRACT_UNAVAILABLE",
+        "Receipt contract is unavailable on the required network. Please try again later."
+      );
+    }
+
+    if (
+      message.includes("fetch failed") ||
+      message.includes("timeout") ||
+      message.includes("network") ||
+      message.includes("http request failed")
+    ) {
+      throw new ApiError(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
+    }
+
+    throw new ApiError(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt subsystem is temporarily unavailable.");
+  }
+}
+
 export async function recoverMintAuthorizationSigner(params: {
   reportHash: string;
   contractAddress?: string | null;

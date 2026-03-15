@@ -1,7 +1,7 @@
 import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
-import { prepareMintAuthorization } from "@/lib/receipt";
+import { prepareMintAuthorization, readMintedReceiptByHash } from "@/lib/receipt";
 import { getSessionContext } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -53,6 +53,18 @@ export async function POST(
         existing: true,
         receipt: report.receipt
       });
+    }
+
+    const onchainReceipt = await readMintedReceiptByHash(report.reportHash);
+    if (
+      onchainReceipt.exists &&
+      onchainReceipt.owner.toLowerCase() !== session.walletAddress.toLowerCase()
+    ) {
+      return fail(
+        409,
+        "OWNER_MISMATCH_ONCHAIN",
+        `This report hash is already minted onchain for ${onchainReceipt.owner}. Switch to that wallet and retry.`
+      );
     }
 
     const reportJson = report.reportJson as {

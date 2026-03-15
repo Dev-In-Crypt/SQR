@@ -15,6 +15,7 @@ export const UI_ERROR_MESSAGES: Record<string, string> = {
   COMPILATION_FAILED: "Source compilation failed in the analysis environment.",
   ANALYSIS_PROCESSING_FAILED: "Analysis could not be completed due to an internal processing issue.",
   OWNER_MISMATCH: "Connected wallet does not match the report owner. Switch wallet and retry.",
+  OWNER_MISMATCH_ONCHAIN: "This report hash is already minted onchain for another wallet.",
   INVALID_SIGNATURE: "Mint authorization signature is invalid.",
   TX_NOT_FOUND_REQUIRED_NETWORK: "Transaction was not found on the required network.",
   MINT_EVENT_NOT_FOUND: "ReceiptMinted event was not found in the transaction.",
@@ -137,6 +138,10 @@ export function resolveUserErrorMessage(params: {
   defaultMessage: string;
 }): string {
   const mapped = params.code ? UI_ERROR_MESSAGES[params.code] : undefined;
+  if (params.code === "OWNER_MISMATCH_ONCHAIN" && params.fallbackMessage?.trim()) {
+    return params.fallbackMessage;
+  }
+
   if (mapped) {
     return mapped;
   }
