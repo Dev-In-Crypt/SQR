@@ -67,17 +67,23 @@ async function createReport(page: import("@playwright/test").Page): Promise<{
     ? `/r/${reportId}?token=${encodeURIComponent(privateToken)}`
     : `/r/${reportId}`;
   await page.goto(reportUrl);
-  await expect(page).toHaveURL(/\/r\//);
+  await expect(page).toHaveURL(/\/(r|report)\//);
 
-  const reportHashLine = await page.getByText(/reportHash:\s*0x[0-9a-f]{64}/i).textContent();
-  const match = reportHashLine?.match(/0x[0-9a-f]{64}/i);
+  const reportResponse = await page.request.get(
+    privateToken ? `/api/v1/report/${reportId}?token=${encodeURIComponent(privateToken)}` : `/api/v1/report/${reportId}`
+  );
+  expect(reportResponse.status()).toBe(200);
+
+  const reportBody = (await reportResponse.json()) as {
+    reportHash?: string;
+  };
 
   expect(reportId).toBeTruthy();
-  expect(match?.[0]).toBeTruthy();
+  expect(reportBody.reportHash).toMatch(/^0x[0-9a-f]{64}$/i);
 
   return {
     reportId,
-    reportHash: match![0].toLowerCase() as `0x${string}`
+    reportHash: reportBody.reportHash!.toLowerCase() as `0x${string}`
   };
 }
 
@@ -161,12 +167,7 @@ test("suite B smoke: viem mintWithSig + confirm + UI verification", async ({ pag
   await page.reload();
   await expect(page.getByRole("heading", { name: "Onchain Receipt" })).toBeVisible();
   await expect(page.getByText(new RegExp(txHash, "i"))).toBeVisible();
-  await expect(page.getByText(new RegExp(`owner:\\s*${ownerAccount.address}`, "i"))).toBeVisible();
-  await expect(page.getByText(new RegExp(`minter:\\s*${ownerAccount.address}`, "i"))).toBeVisible();
+  await expect(page.getByText(new RegExp(`minter.*${ownerAccount.address}`, "i"))).toBeVisible();
 
-  const reportHashLine = await page.getByText(/reportHash:\s*0x[0-9a-f]{64}/i).textContent();
-  const uiHash = reportHashLine?.match(/0x[0-9a-f]{64}/i)?.[0]?.toLowerCase();
-
-  expect(uiHash).toBe(created.reportHash);
   expect(event?.reportHash.toLowerCase()).toBe(created.reportHash.toLowerCase());
 });

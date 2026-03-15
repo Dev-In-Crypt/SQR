@@ -132,7 +132,6 @@ interface ConfirmPayload {
 }
 
 const SCANNER_SUMMARY_NOTES = [
-  "Automated analysis did not identify issues within the current scan scope. Additional manual review can provide deeper context.",
   "No issues were identified within the automated analysis scope for this input. Independent review may add further validation.",
   "The automated review did not surface issues for the provided source and configured analysis scope."
 ] as const;
