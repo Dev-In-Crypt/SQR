@@ -28,6 +28,8 @@ const envSchema = z.object({
   ANALYSIS_STALE_TIMEOUT_MS: z.coerce.number().int().positive().default(240000),
   ANALYSIS_STALE_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
   SCANNER_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
+  ENABLE_FOUNDRY_CHECK: z.string().default("true"),
+  FOUNDRY_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
   OPENAI_EXEC_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   OPENAI_AUDIT_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
   ENABLE_SLITHER: z.string().default("true"),
@@ -112,7 +114,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       .map((item) => item.trim().toLowerCase())
       .filter((item) => item.length > 0),
     isProd: env.NODE_ENV === "production",
-    slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true"
+    slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true",
+    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true"
   };
 }
 

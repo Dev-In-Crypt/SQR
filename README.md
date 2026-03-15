@@ -109,7 +109,7 @@ See: `SecurityChecks.md`
 
 1. Source ingestion (snippet or verified contract source by address)
 2. Source normalization and validation
-3. Static analysis scanner stage (Slither when available, with fallback behavior)
+3. Static analysis scanner stage (Slither + Foundry build checks when available, with fallback behavior)
 4. Structured contract context extraction
 5. AI audit stage
 6. Report assembly and persistence

@@ -53,6 +53,12 @@ interface SlitherExecutionPlan {
   cleanupDir?: string;
 }
 
+interface FoundryExecutionPlan {
+  cwd: string;
+  standalone: boolean;
+  cleanupDir?: string;
+}
+
 interface SlitherDetector {
   check?: string;
   impact?: string;
@@ -191,6 +197,10 @@ function dedupeFindings(findings: Finding[]): Finding[] {
   }
 
   return [...map.values()];
+}
+
+function dedupeMessages(messages: string[]): string[] {
+  return [...new Set(messages.map((item) => item.trim()).filter((item) => item.length > 0))];
 }
 
 function truncateDiagnostic(raw: string): string {
@@ -427,6 +437,81 @@ async function createSlitherExecutionPlan(
     standalone: true,
     cleanupDir: workspace.workDir
   };
+}
+
+async function createFoundryExecutionPlan(
+  sourceBundle: SourceBundle,
+  runtimeMode: SlitherRuntimeMode
+): Promise<FoundryExecutionPlan> {
+  if (runtimeMode === "snippet") {
+    const workspace = await materializeSourceBundle(sourceBundle);
+    return {
+      cwd: workspace.workDir,
+      standalone: true,
+      cleanupDir: workspace.workDir
+    };
+  }
+
+  const existingEntryPoint = await resolveExistingEntryPoint(sourceBundle);
+  if (existingEntryPoint) {
+    const foundryRoot = await findFoundryProjectRoot(dirname(existingEntryPoint));
+    if (foundryRoot && isWithinPath(existingEntryPoint, foundryRoot)) {
+      return {
+        cwd: foundryRoot,
+        standalone: false
+      };
+    }
+  }
+
+  const workspace = await materializeSourceBundle(sourceBundle);
+  return {
+    cwd: workspace.workDir,
+    standalone: true,
+    cleanupDir: workspace.workDir
+  };
+}
+
+function buildFoundryToml(sourceBundle: SourceBundle): string {
+  const remappings = buildSolcRemappings(sourceBundle);
+  const lines = [
+    "[profile.default]",
+    'src = "."',
+    'out = "out"',
+    'test = "test"',
+    'script = "script"',
+    'libs = ["lib", "node_modules"]'
+  ];
+
+  if (remappings.length > 0) {
+    const remappingsLiteral = remappings.map((item) => `"${item}"`).join(", ");
+    lines.push(`remappings = [${remappingsLiteral}]`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function buildForgeDiagnostics(params: {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  errorMessage?: string;
+}): string {
+  const parts: string[] = [];
+  if (params.stderr.trim()) {
+    parts.push(`stderr=${params.stderr.trim()}`);
+  }
+  if (params.stdout.trim()) {
+    parts.push(`stdout=${params.stdout.trim()}`);
+  }
+  if (params.errorMessage?.trim()) {
+    parts.push(`spawnError=${params.errorMessage.trim()}`);
+  }
+  if (parts.length === 0) {
+    parts.push(`exitCode=${params.code ?? "unknown"}`);
+  }
+
+  const compact = parts.join(" | ").replace(/\s+/g, " ");
+  return truncateDiagnostic(compact);
 }
 
 async function readSlitherOutput(
@@ -740,6 +825,69 @@ async function runSlither(params: {
   }
 }
 
+async function runForge(params: {
+  sourceBundle: SourceBundle;
+  runtime: ScannerRuntime;
+  runtimeMode: SlitherRuntimeMode;
+  forgeRequired: boolean;
+}): Promise<ScannerOutput> {
+  const scannerErrors: string[] = [];
+  const warnings: string[] = [];
+
+  const plan = await createFoundryExecutionPlan(params.sourceBundle, params.runtimeMode);
+
+  try {
+    if (plan.standalone) {
+      const foundryTomlPath = join(plan.cwd, "foundry.toml");
+      await writeFile(foundryTomlPath, buildFoundryToml(params.sourceBundle), "utf8");
+    }
+
+    const commandResult = await params.runtime.runCommand("forge", ["build"], {
+      cwd: plan.cwd,
+      env: process.env,
+      timeoutMs: config.FOUNDRY_TIMEOUT_MS
+    });
+
+    if (commandResult.code !== 0) {
+      const diagnostic = buildForgeDiagnostics({
+        code: commandResult.code,
+        stdout: commandResult.stdout,
+        stderr: commandResult.stderr,
+        errorMessage: commandResult.errorMessage
+      });
+
+      if (params.forgeRequired) {
+        scannerErrors.push(`FOUNDRY_ERROR:${diagnostic}`);
+      } else {
+        warnings.push(`FOUNDRY_WARNING:${diagnostic}`);
+      }
+    }
+
+    return {
+      findings: [],
+      scannerErrors,
+      warnings
+    };
+  } catch (error) {
+    const diagnostic = truncateDiagnostic(error instanceof Error ? error.message : String(error));
+    if (params.forgeRequired) {
+      scannerErrors.push(`FOUNDRY_ERROR:${diagnostic}`);
+    } else {
+      warnings.push(`FOUNDRY_WARNING:${diagnostic}`);
+    }
+
+    return {
+      findings: [],
+      scannerErrors,
+      warnings
+    };
+  } finally {
+    if (plan.cleanupDir) {
+      await rm(plan.cleanupDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+}
+
 async function runHeuristicScan(sourceBundle: SourceBundle): Promise<Finding[]> {
   const rules: Array<{
     pattern: RegExp;
@@ -836,8 +984,10 @@ export async function runStaticScan(
   sourceBundle: SourceBundle,
   options: {
     skipSlither?: boolean;
+    skipForge?: boolean;
     scanMode?: SlitherRuntimeMode;
     slitherRequired?: boolean;
+    forgeRequired?: boolean;
     runtime?: ScannerRuntime;
   } = {}
 ): Promise<ScannerOutput> {
@@ -847,9 +997,11 @@ export async function runStaticScan(
   const runtimeMode: SlitherRuntimeMode =
     options.scanMode ?? (sourceBundle.inputType === "PASTE_CODE" ? "snippet" : "project");
   const slitherRequired = options.slitherRequired ?? runtimeMode === "project";
+  const forgeRequired = options.forgeRequired ?? true;
   const runtime = options.runtime ?? defaultScannerRuntime;
 
   const shouldRunSlither = config.slitherEnabled && !options.skipSlither;
+  const shouldRunForge = config.foundryEnabled && !options.skipForge;
 
   if (shouldRunSlither) {
     const slitherResult = await runSlither({
@@ -863,14 +1015,26 @@ export async function runStaticScan(
     findings = slitherResult.findings;
   }
 
+  if (shouldRunForge) {
+    const forgeResult = await runForge({
+      sourceBundle,
+      runtime,
+      runtimeMode,
+      forgeRequired
+    });
+    scannerErrors.push(...forgeResult.scannerErrors);
+    warnings.push(...forgeResult.warnings);
+    findings.push(...forgeResult.findings);
+  }
+
   if (findings.length === 0) {
     findings = await runHeuristicScan(sourceBundle);
   }
 
   return {
     findings: dedupeFindings(findings),
-    scannerErrors,
-    warnings
+    scannerErrors: dedupeMessages(scannerErrors),
+    warnings: dedupeMessages(warnings)
   };
 }
 

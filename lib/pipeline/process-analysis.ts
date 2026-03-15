@@ -70,6 +70,7 @@ function hasScannerInfraDiagnostic(diagnostics: string[]): boolean {
 
     return (
       normalized.includes("spawn slither enoent") ||
+      normalized.includes("spawn forge enoent") ||
       normalized.includes("spawn solc enoent") ||
       normalized.includes("command not found") ||
       normalized.includes("slither_skipped_solc_missing") ||
@@ -213,7 +214,12 @@ function resolveFailureErrorCode(error: unknown): string {
       return "ANALYSIS_TIMEOUT";
     }
 
-    if (normalized.includes("COMPILATION_FAILED") || normalized.includes("SLITHER_COMPILATION") || normalized.includes("SOLC")) {
+    if (
+      normalized.includes("COMPILATION_FAILED") ||
+      normalized.includes("SLITHER_COMPILATION") ||
+      normalized.includes("FOUNDRY_ERROR") ||
+      normalized.includes("SOLC")
+    ) {
       return "COMPILATION_FAILED";
     }
   }
@@ -389,6 +395,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
     const staticScan = isSnippetIncomplete
       ? await runStaticScan(sourceBundle, {
           skipSlither: true,
+          skipForge: true,
           scanMode: "snippet",
           slitherRequired: false
         })

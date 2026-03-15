@@ -65,12 +65,16 @@ describe("scanner runtime modes", () => {
   const originalEnableAutoResolve = config.ENABLE_SOLC_AUTO_RESOLVE;
   const originalSolcVersionManager = config.SOLC_VERSION_MANAGER;
   const originalSolcFallbackPath = config.SOLC_FALLBACK_PATH;
+  const originalEnableFoundryCheck = config.ENABLE_FOUNDRY_CHECK;
+  const originalFoundryEnabled = config.foundryEnabled;
 
   beforeEach(() => {
     config.SOLC_PATH = undefined;
     config.ENABLE_SOLC_AUTO_RESOLVE = "false";
     config.SOLC_VERSION_MANAGER = "";
     config.SOLC_FALLBACK_PATH = undefined;
+    config.ENABLE_FOUNDRY_CHECK = "false";
+    config.foundryEnabled = false;
   });
 
   afterEach(() => {
@@ -78,6 +82,8 @@ describe("scanner runtime modes", () => {
     config.ENABLE_SOLC_AUTO_RESOLVE = originalEnableAutoResolve;
     config.SOLC_VERSION_MANAGER = originalSolcVersionManager;
     config.SOLC_FALLBACK_PATH = originalSolcFallbackPath;
+    config.ENABLE_FOUNDRY_CHECK = originalEnableFoundryCheck;
+    config.foundryEnabled = originalFoundryEnabled;
   });
 
   it("snippet mode uses standalone solc runtime and ignores foundry mode", async () => {
@@ -450,5 +456,64 @@ describe("scanner runtime modes", () => {
 
     expect(slitherCall).toBeTruthy();
     expect(remapFlagCount).toBe(0);
+  });
+
+  it("runs forge build for snippet scans when foundry checks are enabled", async () => {
+    config.ENABLE_FOUNDRY_CHECK = "true";
+    config.foundryEnabled = true;
+
+    const harness = createRuntimeHarness(async (call) => {
+      if (call.command === "forge") {
+        return { code: 0, stdout: "forge build ok", stderr: "" };
+      }
+
+      return { code: 1, stdout: "", stderr: "unexpected command" };
+    });
+
+    const bundle = makeSourceBundle({
+      inputType: "PASTE_CODE",
+      path: "PastedSnippet.sol",
+      content: "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract A { function run() external {} }"
+    });
+
+    const result = await runStaticScan(bundle, {
+      skipSlither: true,
+      scanMode: "snippet",
+      forgeRequired: true,
+      runtime: harness.runtime
+    });
+
+    const forgeCall = harness.calls.find((item) => item.command === "forge");
+    expect(forgeCall).toBeTruthy();
+    expect(forgeCall?.args).toEqual(["build"]);
+    expect(result.scannerErrors).toEqual([]);
+  });
+
+  it("reports forge failures as scanner errors when required", async () => {
+    config.ENABLE_FOUNDRY_CHECK = "true";
+    config.foundryEnabled = true;
+
+    const harness = createRuntimeHarness(async (call) => {
+      if (call.command === "forge") {
+        return { code: 1, stdout: "", stderr: "ParserError: expected ';'" };
+      }
+
+      return { code: 1, stdout: "", stderr: "unexpected command" };
+    });
+
+    const bundle = makeSourceBundle({
+      inputType: "BASE_ADDRESS",
+      path: "Remote.sol",
+      content: "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract A { function run() external {} }"
+    });
+
+    const result = await runStaticScan(bundle, {
+      skipSlither: true,
+      scanMode: "project",
+      forgeRequired: true,
+      runtime: harness.runtime
+    });
+
+    expect(result.scannerErrors.some((item) => item.startsWith("FOUNDRY_ERROR:"))).toBe(true);
   });
 });
