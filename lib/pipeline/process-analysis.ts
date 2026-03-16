@@ -227,6 +227,41 @@ function resolveFailureErrorCode(error: unknown): string {
   return "ANALYSIS_PROCESSING_FAILED";
 }
 
+function truncateFailureDetail(raw: string): string {
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "unknown failure";
+  }
+
+  if (normalized.length <= 1200) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 1197)}...`;
+}
+
+function resolveFailureDetail(error: unknown): string | null {
+  if (error instanceof AnalysisTimeoutError) {
+    return truncateFailureDetail(error.message);
+  }
+
+  if (!(error instanceof Error)) {
+    return truncateFailureDetail(String(error));
+  }
+
+  const message = error.message || "";
+  const compilationPrefix = "COMPILATION_FAILED:";
+  if (message.startsWith(compilationPrefix)) {
+    const detail = message.slice(compilationPrefix.length).trim();
+    if (!detail) {
+      return "Compilation failed without additional diagnostics.";
+    }
+    return truncateFailureDetail(detail);
+  }
+
+  return truncateFailureDetail(message);
+}
+
 function asSourceBundle(value: unknown): SourceBundle {
   const bundle = value as SourceBundle;
   if (!bundle || !Array.isArray(bundle.files) || typeof bundle.chainId !== "number") {
@@ -517,13 +552,38 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
     });
   } catch (error) {
     const errorCode = resolveFailureErrorCode(error);
+    const errorDetail = resolveFailureDetail(error);
 
     logError("Analysis processing failed", {
       analysisId: analysis.id,
       error: error instanceof Error ? error.message : String(error),
       errorCode,
+      errorDetail,
       timeoutStage: error instanceof AnalysisTimeoutError ? error.stage : undefined
     });
+
+    if (analysis.sourceBundle) {
+      const existingMeta =
+        analysis.sourceBundle.sourceMetaJson && typeof analysis.sourceBundle.sourceMetaJson === "object"
+          ? (analysis.sourceBundle.sourceMetaJson as Record<string, unknown>)
+          : {};
+
+      await prisma.sourceBundle
+        .update({
+          where: { analysisId: analysis.id },
+          data: {
+            sourceMetaJson: {
+              ...existingMeta,
+              processingError: {
+                code: errorCode,
+                detail: errorDetail,
+                at: new Date().toISOString()
+              }
+            } as Prisma.InputJsonValue
+          }
+        })
+        .catch(() => undefined);
+    }
 
     await prisma.analysisRequest.update({
       where: { id: analysis.id },

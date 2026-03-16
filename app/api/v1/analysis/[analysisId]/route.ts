@@ -3,6 +3,26 @@ import { prisma } from "@/lib/db";
 import { peekPrivateToken } from "@/lib/request-context";
 import { getSessionContext } from "@/lib/session";
 
+function readAnalysisErrorDetail(sourceMetaJson: unknown): string | null {
+  if (!sourceMetaJson || typeof sourceMetaJson !== "object") {
+    return null;
+  }
+
+  const sourceMeta = sourceMetaJson as Record<string, unknown>;
+  const processingError = sourceMeta.processingError;
+  if (!processingError || typeof processingError !== "object") {
+    return null;
+  }
+
+  const detail = (processingError as Record<string, unknown>).detail;
+  if (typeof detail !== "string") {
+    return null;
+  }
+
+  const trimmed = detail.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export const runtime = "nodejs";
 
 export async function GET(
@@ -16,6 +36,11 @@ export async function GET(
     const analysis = await prisma.analysisRequest.findUnique({
       where: { id: analysisId },
       include: {
+        sourceBundle: {
+          select: {
+            sourceMetaJson: true
+          }
+        },
         report: {
           select: {
             id: true
@@ -49,6 +74,7 @@ export async function GET(
       pipelineStage: analysis.pipelineStage,
       reportId: analysis.report?.id ?? null,
       errorCode: analysis.errorCode,
+      errorDetail: analysis.status === "FAILED" ? readAnalysisErrorDetail(analysis.sourceBundle?.sourceMetaJson) : null,
       privateToken
     });
   } catch (error) {

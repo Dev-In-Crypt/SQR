@@ -17,6 +17,7 @@ interface AnalysisStatusResponse {
     | null;
   reportId: string | null;
   errorCode: string | null;
+  errorDetail: string | null;
   privateToken: string | null;
 }
 
@@ -301,6 +302,7 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
               <strong>{analysisErrorDetails.title}</strong>
               <div>{analysisErrorDetails.message}</div>
               {analysisErrorDetails.hint ? <div className="muted">{analysisErrorDetails.hint}</div> : null}
+              {data.errorDetail ? <div className="muted">details: {data.errorDetail}</div> : null}
               {analysisErrorDetails.code ? <div className="muted">code: {analysisErrorDetails.code}</div> : null}
             </div>
           ) : null}
