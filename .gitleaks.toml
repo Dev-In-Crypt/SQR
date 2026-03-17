@@ -1,0 +1,16 @@
+title = "solidity-quick-review gitleaks config"
+
+[allowlist]
+description = "Allow known test fixtures and local development defaults"
+regexes = [
+  '''0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d''',
+  '''0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80''',
+  '''postgresql://postgres:postgres@localhost:5432/solidity_quick_review\?schema=public''',
+]
+
+paths = [
+  '''^contracts/test/''',
+  '''^tests/e2e/''',
+  '''^tests/integration/''',
+  '''^scripts/run-e2e-tests\.ts$''',
+]

@@ -91,6 +91,17 @@ Operational runbook: `docs/operations/systemd-vps.md`
   - emitted event: `ReceiptMinted(reportHash, contractAddress, analyzerVersionHash, owner, minter, timestamp, receiptId)`
   - authorization protections: signed EIP-712 payload with `nonce` and `deadline`
 
+## Polkadot Hub deployment
+
+- Polkadot Hub Testnet (`420420417`): `https://eth-rpc-testnet.polkadot.io/`
+- Polkadot Hub Mainnet (`420420419`): `https://eth-rpc.polkadot.io/`
+- Explorers:
+  - Testnet: `https://blockscout-testnet.polkadot.io`
+  - Mainnet: `https://blockscout.polkadot.io`
+- Deploy commands (requires `DEPLOYER_PRIVATE_KEY` in local env):
+  - `npm run deploy:receipt:polkadot:testnet`
+  - `npm run deploy:receipt:polkadot:mainnet`
+
 ## Security model
 
 - Reports are private-by-default and owner-scoped unless explicitly shared/published.
@@ -101,6 +112,7 @@ Operational runbook: `docs/operations/systemd-vps.md`
 - Deadline enforcement limits signature lifetime.
 - Receipt network is explicitly chain-gated by environment.
 - Slither security gate blocks CI on `MEDIUM` and `HIGH` severities.
+- Gitleaks scans commits and CI for accidental secret exposure.
 - The platform is an automated review layer, not a replacement for manual audits.
 
 See: `SecurityChecks.md`
@@ -149,6 +161,12 @@ Analysis runs asynchronously via worker queue mode or inline runtime mode, depen
 ## Environment configuration
 
 Use `.env.example` as the baseline for local/staging/production configuration.
+
+## Secret scanning
+
+- Install local git hooks: `npm run hooks:install`
+- Run local secret scan: `npm run security:gitleaks`
+- CI workflow: `.github/workflows/gitleaks.yml`
 
 ## Repository structure
 
