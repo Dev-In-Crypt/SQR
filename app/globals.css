@@ -592,6 +592,15 @@ main > section.stack.page-container {
   padding: 15px;
 }
 
+.home-network-select {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #11110f 0%, #0b0b0a 100%);
+}
+
+.home-network-hint {
+  font-size: 0.8rem;
+}
+
 .home-address-input {
   border-color: rgba(255, 255, 255, 0.2);
   background: linear-gradient(180deg, #11110f 0%, #0b0b0a 100%);

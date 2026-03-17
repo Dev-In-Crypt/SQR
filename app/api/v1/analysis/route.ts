@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     if (payload.inputType === "BASE_ADDRESS" && !session.userId) {
-      throw new ApiError(401, "WALLET_REQUIRED", "Wallet login is required for Base address analysis");
+      throw new ApiError(401, "WALLET_REQUIRED", "Wallet login is required for EVM address analysis");
     }
 
     const inputHash = computeInputHash({

@@ -79,11 +79,11 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
               <strong>mintedAt:</strong> {new Date(data.receipt.mintedAt).toLocaleString()}
             </div>
             <Link
-              href={`https://basescan.org/tx/${data.receipt.txHash}`}
+              href={explorerTxUrl(data.receipt.chainId, data.receipt.txHash)}
               target="_blank"
               rel="noreferrer"
             >
-              Open transaction on BaseScan
+              Open transaction in explorer
             </Link>
           </>
         ) : (
@@ -102,3 +102,22 @@ export default function ReceiptClient({ reportId, token }: { reportId: string; t
     </div>
   );
 }
+  function explorerTxUrl(chainId: number, txHash: string): string {
+    if (chainId === 8453) {
+      return `https://basescan.org/tx/${txHash}`;
+    }
+
+    if (chainId === 84532) {
+      return `https://sepolia.basescan.org/tx/${txHash}`;
+    }
+
+    if (chainId === 420420417) {
+      return `https://blockscout-testnet.polkadot.io/tx/${txHash}`;
+    }
+
+    if (chainId === 420420419) {
+      return `https://blockscout.polkadot.io/tx/${txHash}`;
+    }
+
+    return `https://blockscout.com/tx/${txHash}`;
+  }

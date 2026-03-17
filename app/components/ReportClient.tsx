@@ -113,18 +113,37 @@ interface RuntimeConfigResponse {
       chainId: `0x${string}`;
       chainName: string;
       nativeCurrency: {
-        name: "Ether";
-        symbol: "ETH";
-        decimals: 18;
+        name: string;
+        symbol: string;
+        decimals: number;
       };
       rpcUrls: string[];
       blockExplorerUrls: string[];
     };
+    supportedNetworks?: Array<{
+      chainId: number;
+      chainHex: `0x${string}`;
+      name: string;
+      label: string;
+      blockExplorerUrl: string;
+      addEthereumChain: {
+        chainId: `0x${string}`;
+        chainName: string;
+        nativeCurrency: {
+          name: string;
+          symbol: string;
+          decimals: number;
+        };
+        rpcUrls: string[];
+        blockExplorerUrls: string[];
+      };
+    }>;
   };
 }
 
 interface ConfirmPayload {
   txHash: string;
+  chainId: number;
   owner: Address;
   nonce: string;
   deadline: string;
@@ -499,6 +518,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
     return {
       txHash,
+      chainId: prepared.call!.chainId,
       owner: prepared.call!.args.owner,
       nonce: prepared.call!.args.nonce,
       deadline: prepared.call!.args.deadline,
@@ -710,8 +730,14 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     }
   }
 
-  async function fetchPreparedMint(): Promise<PreparedReceiptResponse> {
-    const prepResp = await fetch(`/api/v1/receipt/${reportId}/prepare`, { method: "POST" });
+  async function fetchPreparedMint(targetChainId: number): Promise<PreparedReceiptResponse> {
+    const prepResp = await fetch(`/api/v1/receipt/${reportId}/prepare`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ targetChainId })
+    });
     const prepJson = (await prepResp.json()) as PreparedReceiptResponse;
 
     if (!prepResp.ok) {
@@ -779,7 +805,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       await ensureRequiredChain();
 
-      let prepared = await fetchPreparedMint();
+      let prepared = await fetchPreparedMint(required.requiredChainId);
 
       if (prepared.existing) {
         await loadReport();
@@ -793,7 +819,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       }
 
       if (BigInt(prepared.call!.args.deadline) <= BigInt(Math.floor(Date.now() / 1000))) {
-        prepared = await fetchPreparedMint();
+        prepared = await fetchPreparedMint(required.requiredChainId);
         if (prepared.existing) {
           await loadReport();
           return;
@@ -815,7 +841,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           throw sendError;
         }
 
-        const refreshed = await fetchPreparedMint();
+        const refreshed = await fetchPreparedMint(required.requiredChainId);
         if (refreshed.existing) {
           await loadReport();
           return;
@@ -843,7 +869,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           throw confirmError;
         }
 
-        const refreshed = await fetchPreparedMint();
+        const refreshed = await fetchPreparedMint(required.requiredChainId);
         if (refreshed.existing) {
           await loadReport();
           return;
@@ -874,7 +900,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       const providerCode = providerErrorCode(actionError);
       if (providerCode === 4001) {
-        const networkLabel = runtimeConfig?.requiredNetworkLabel || "the required Base network";
+        const networkLabel = runtimeConfig?.requiredNetworkLabel || "the required EVM network";
         setError(`Mint requires ${networkLabel}. Wallet request was rejected.`);
         return;
       }
@@ -888,7 +914,8 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       if (message.toLowerCase().includes("expired")) {
         try {
-          const refreshed = await fetchPreparedMint();
+          const fallbackRequired = runtimeConfig || (await fetchRuntimeConfig());
+          const refreshed = await fetchPreparedMint(fallbackRequired.requiredChainId);
           if (!refreshed.existing && refreshed.call && refreshed.typedData) {
             setMintPayload({
               to: refreshed.call.to,
@@ -1008,7 +1035,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                     </button>
                   ) : null}
                   <button className="button warn" type="button" disabled={busy} onClick={mintReceipt}>
-                    Mint Base receipt
+                    Mint EVM receipt
                   </button>
                 </div>
 

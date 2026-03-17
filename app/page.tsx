@@ -11,7 +11,7 @@ export default function HomePage() {
                 <div className="stack hero-copy">
                   <h1>Solidity Quick Review</h1>
                   <p className="hero-subheadline">
-                    Check Solidity snippets and verified Base contracts in minutes with AI-assisted static analysis and
+                    Check Solidity snippets and verified EVM contracts in minutes with AI-assisted static analysis and
                     structured findings you can share when needed.
                   </p>
                   <p className="hero-subheadline hero-subheadline-secondary">
@@ -35,7 +35,7 @@ export default function HomePage() {
               <ol className="steps polished-steps">
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">Submit Solidity snippets or verified Base contract addresses.</strong>{" "}
+                    <strong className="how-step-lead">Submit Solidity snippets or verified EVM contract addresses.</strong>{" "}
                     The system retrieves the source code for analysis.
                   </span>
                 </li>
@@ -89,9 +89,9 @@ export default function HomePage() {
                   </p>
                 </article>
                 <article className="info-block stack">
-                  <h3>Base builders and teams</h3>
+                  <h3>EVM builders and teams</h3>
                   <p className="muted">
-                    Review verified Base contracts before deeper manual audits, integrations, or launches, and keep a
+                    Review verified EVM contracts before deeper manual audits, integrations, or launches, and keep a
                     record of what was checked.
                   </p>
                 </article>
@@ -124,7 +124,7 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>Who is this for?</summary>
                   <p className="muted">
-                    Solidity developers, Base builders, product teams, and users who need a fast review checkpoint.
+                    Solidity developers, EVM builders, product teams, and users who need a fast review checkpoint.
                     It fits early validation before deployment, integration, or deeper manual review.
                   </p>
                 </details>
@@ -159,7 +159,7 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>What is an onchain receipt?</summary>
                   <p className="muted">
-                    It is an optional Base transaction that timestamps a signed report hash.
+                    It is an optional EVM transaction on the selected receipt network that timestamps a signed report hash.
                     This provides onchain proof that a specific report output existed at that time.
                   </p>
                 </details>
@@ -173,7 +173,7 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>What can I analyze?</summary>
                   <p className="muted">
-                    You can paste Solidity snippets or submit verified Base contract addresses.
+                    You can paste Solidity snippets or submit verified EVM contract addresses.
                     The platform is designed for practical automated review on these input types.
                   </p>
                 </details>
@@ -210,7 +210,7 @@ export default function HomePage() {
                   <div className="roadmap-panel">
                     <h3 className="roadmap-title roadmap-title-nowrap">Cross chain contract support</h3>
                     <p className="muted roadmap-description roadmap-description-nowrap">
-                      Add analysis support for contracts deployed on additional EVM networks beyond Base.
+                      Expand analysis coverage for contracts deployed across additional EVM networks.
                     </p>
                   </div>
                 </article>

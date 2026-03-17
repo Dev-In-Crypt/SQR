@@ -12,11 +12,30 @@ interface SessionResponse {
   walletAddress: string | null;
 }
 
+interface RuntimeConfigResponse {
+  analysis?: {
+    defaultChainId?: number;
+    supportedNetworks?: Array<{
+      chainId: number;
+      label: string;
+      name: string;
+      chainHex: `0x${string}`;
+      blockExplorerUrl: string;
+    }>;
+  };
+}
+
+interface AnalysisNetworkOption {
+  chainId: number;
+  label: string;
+}
+
+const DEFAULT_ANALYSIS_NETWORKS: AnalysisNetworkOption[] = [{ chainId: 8453, label: "Base" }];
+
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
 export default function HomeForm() {
-  const chainId = 8453;
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -27,9 +46,15 @@ export default function HomeForm() {
   const [addressInteracted, setAddressInteracted] = useState(false);
   const [showSnippetWarning, setShowSnippetWarning] = useState(false);
   const [showAddressWarning, setShowAddressWarning] = useState(false);
+  const [networkOptions, setNetworkOptions] = useState<AnalysisNetworkOption[]>(DEFAULT_ANALYSIS_NETWORKS);
+  const [selectedChainId, setSelectedChainId] = useState<number>(DEFAULT_ANALYSIS_NETWORKS[0].chainId);
 
   const trimmedCode = code.trim();
   const trimmedAddress = address.trim();
+  const selectedNetworkLabel = useMemo(
+    () => networkOptions.find((item) => item.chainId === selectedChainId)?.label || `Chain ${selectedChainId}`,
+    [networkOptions, selectedChainId]
+  );
 
   const snippetCompleteness = useMemo(() => analyzeSnippetCompleteness(code), [code]);
   const snippetIncomplete = !snippetCompleteness.isComplete;
@@ -48,8 +73,41 @@ export default function HomeForm() {
     setWalletAddress(payload.walletAddress);
   }
 
+  async function refreshRuntimeConfig() {
+    try {
+      const response = await fetch("/api/v1/config", { cache: "no-store" });
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as RuntimeConfigResponse;
+      const supported = (payload.analysis?.supportedNetworks || [])
+        .map((item) => ({ chainId: item.chainId, label: item.label }))
+        .filter((item) => Number.isInteger(item.chainId));
+
+      if (supported.length === 0) {
+        return;
+      }
+
+      setNetworkOptions(supported);
+      const configuredDefault = payload.analysis?.defaultChainId;
+
+      if (configuredDefault && supported.some((item) => item.chainId === configuredDefault)) {
+        setSelectedChainId(configuredDefault);
+        return;
+      }
+
+      setSelectedChainId((current) =>
+        supported.some((item) => item.chainId === current) ? current : supported[0].chainId
+      );
+    } catch {
+      // Keep safe fallback to Base if runtime config is unavailable.
+    }
+  }
+
   useEffect(() => {
     void refreshSession();
+    void refreshRuntimeConfig();
   }, []);
 
   useEffect(() => {
@@ -134,12 +192,12 @@ export default function HomeForm() {
           ? {
               inputType: "PASTE_CODE",
               code,
-              chainId
+              chainId: selectedChainId
             }
           : {
               inputType: "BASE_ADDRESS",
               address: trimmedAddress,
-              chainId
+              chainId: selectedChainId
             };
 
       const response = await fetch("/api/v1/analysis", {
@@ -198,11 +256,27 @@ export default function HomeForm() {
             setShowSnippetWarning(false);
           }}
         >
-          Contract address
+          EVM address
         </button>
       </div>
 
       <div className="stack home-tab-panel">
+        <label className="stack home-input-group">
+          <span>EVM network</span>
+          <select
+            className="select home-network-select"
+            value={String(selectedChainId)}
+            onChange={(event) => setSelectedChainId(Number(event.target.value))}
+          >
+            {networkOptions.map((network) => (
+              <option key={network.chainId} value={network.chainId}>
+                {network.label}
+              </option>
+            ))}
+          </select>
+          <span className="muted home-network-hint">Selected network: {selectedNetworkLabel}</span>
+        </label>
+
         {tab === "PASTE_CODE" ? (
           <label className="stack home-input-group">
             <span>Solidity snippet (max 200 lines)</span>
@@ -225,13 +299,13 @@ export default function HomeForm() {
         ) : (
           <div className="stack home-input-group">
             <div className="stack home-wallet-state">
-              <span>Wallet authentication is required for address analysis.</span>
+              <span>Wallet authentication is required for contract address analysis.</span>
               <span className="muted">
                 {walletAddress ? `Wallet connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Wallet not connected"}
               </span>
             </div>
             <label className="stack">
-              <span>Base contract address</span>
+              <span>EVM contract address</span>
               <input
                 className="input home-address-input"
                 value={address}
