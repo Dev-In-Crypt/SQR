@@ -220,7 +220,8 @@ export async function waitForAnalysisTerminal(
 export async function createPasteAnalysisAndWait(
   session: HttpSession,
   code?: string,
-  chainId = DEFAULT_CHAIN_ID
+  chainId = DEFAULT_CHAIN_ID,
+  timeoutMs = 90_000
 ): Promise<{
   analysisId: string;
   reportId: string;
@@ -242,7 +243,7 @@ export async function createPasteAnalysisAndWait(
     throw new Error(`Create analysis failed: ${JSON.stringify(create.body)}`);
   }
 
-  const terminal = await waitForAnalysisTerminal(session, create.body.analysisId);
+  const terminal = await waitForAnalysisTerminal(session, create.body.analysisId, timeoutMs);
 
   if (!terminal.reportId) {
     throw new Error(`Analysis did not produce reportId: ${JSON.stringify(terminal)}`);

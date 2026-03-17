@@ -53,7 +53,7 @@ describe("wallet ensureChain", () => {
     const result = await ensureChain({
       provider,
       requiredChainId: 8453,
-      requiredNetworkLabel: "Base Mainnet",
+      requiredNetworkLabel: "Base",
       addEthereumChain: addEthereumChainParams()
     });
 
@@ -93,7 +93,7 @@ describe("wallet ensureChain", () => {
     const result = await ensureChain({
       provider,
       requiredChainId: 8453,
-      requiredNetworkLabel: "Base Mainnet",
+      requiredNetworkLabel: "Base",
       addEthereumChain: addEthereumChainParams()
     });
 
@@ -124,7 +124,7 @@ describe("wallet ensureChain", () => {
       ensureChain({
         provider,
         requiredChainId: 8453,
-        requiredNetworkLabel: "Base Mainnet",
+        requiredNetworkLabel: "Base",
         addEthereumChain: addEthereumChainParams()
       })
     ).rejects.toMatchObject({
@@ -149,7 +149,7 @@ describe("wallet ensureChain", () => {
       ensureChain({
         provider,
         requiredChainId: 8453,
-        requiredNetworkLabel: "Base Mainnet",
+        requiredNetworkLabel: "Base",
         addEthereumChain: addEthereumChainParams()
       })
     ).rejects.toMatchObject({
@@ -157,6 +157,5 @@ describe("wallet ensureChain", () => {
     });
   });
 });
-
 
 

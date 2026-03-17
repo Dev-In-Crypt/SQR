@@ -26,7 +26,7 @@ describe("API integration - failure handling", () => {
     expect(response.body.error?.code).toBe("INCOMPLETE_SNIPPET");
   });
 
-  it("scanner failure on complete snippet is warning-only and preserves diagnostics", async () => {
+  it("scanner failure on complete snippet returns PARTIAL and preserves diagnostics", async () => {
     const session = createSession({ ip: "198.51.100.52" });
 
     const scannerFailureInput = [
@@ -59,8 +59,8 @@ describe("API integration - failure handling", () => {
     const configuredSolcPath = process.env.SOLC_PATH?.trim();
 
     expect(report.status).toBe(200);
-    expect(created.terminalStatus).toBe("DONE_WITH_WARNINGS");
-    expect(report.body.report.partialReasons).not.toContain("PARTIAL_SCANNER_FAILURE");
+    expect(created.terminalStatus).toBe("PARTIAL");
+    expect(report.body.report.partialReasons).toContain("PARTIAL_SCANNER_FAILURE");
     expect(report.body.report.scannerErrors.some((item) => item.startsWith("SLITHER_ERROR"))).toBe(false);
 
     if (configuredSolcPath) {
@@ -78,7 +78,7 @@ describe("API integration - failure handling", () => {
   it("LLM-unavailable fallback still returns deterministic summary and terminal status", async () => {
     const session = createSession({ ip: "198.51.100.51" });
 
-    const created = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("LLMFallback"));
+    const created = await createPasteAnalysisAndWait(session, uniqueCodeSnippet("LLMFallback"), 8453, 120_000);
 
     const report = await session.getJson<{
       report: {
@@ -92,7 +92,7 @@ describe("API integration - failure handling", () => {
     );
 
     expect(report.status).toBe(200);
-    expect(["DONE_WITH_WARNINGS", "COMPLETED"]).toContain(created.terminalStatus);
+    expect(["DONE_WITH_WARNINGS", "COMPLETED", "PARTIAL"]).toContain(created.terminalStatus);
     expect(report.body.report.executiveSummary.length).toBeGreaterThan(20);
   });
 

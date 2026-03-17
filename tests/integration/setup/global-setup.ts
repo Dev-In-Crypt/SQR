@@ -224,10 +224,18 @@ export default async function integrationGlobalSetup() {
       SQR_NEXT_TSCONFIG: runScopedTsconfig
     };
 
+    await runCommand({
+      prefix: "integration:next-build",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "build"],
+      cwd: ROOT,
+      env: appEnv
+    });
+
     nextProcess = spawnLongRunningProcess({
       prefix: "integration:next",
       command: process.execPath,
-      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "dev", "-p", String(appPort), "-H", "127.0.0.1"],
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "start", "-p", String(appPort), "-H", "127.0.0.1"],
       cwd: ROOT,
       env: appEnv
     });
@@ -266,4 +274,3 @@ export default async function integrationGlobalSetup() {
     throw error;
   }
 }
-

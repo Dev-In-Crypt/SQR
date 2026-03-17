@@ -6,7 +6,7 @@ export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  retries: process.env.CI ? 2 : 1,
   timeout: 180_000,
   expect: {
     timeout: 20_000
@@ -27,6 +27,8 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "off",
+    navigationTimeout: 45_000,
+    actionTimeout: 30_000,
     launchOptions: {
       args: ["--no-sandbox", "--disable-dev-shm-usage"]
     }

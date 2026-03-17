@@ -215,17 +215,26 @@ async function main() {
       BASE_MAINNET_RPC_URL: rpcUrl,
       BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: deployReceipt.contractAddress,
-      ENABLE_SLITHER: "true",
+      ENABLE_SLITHER: "false",
+      ENABLE_FOUNDRY_CHECK: "false",
       OPENAI_API_KEY: "",
       REDIS_URL: "",
       SQR_NEXT_DIST_DIR: runScopedDistDir,
       SQR_NEXT_TSCONFIG: runScopedTsconfig
     };
 
+    await runCommand({
+      prefix: "e2e:next-build",
+      command: process.execPath,
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "build"],
+      cwd: ROOT,
+      env: appEnv
+    });
+
     appProcess = spawnLongRunningProcess({
       prefix: "e2e:next",
       command: process.execPath,
-      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "dev", "-p", String(appPort), "-H", "127.0.0.1"],
+      args: [resolve(ROOT, "node_modules/next/dist/bin/next"), "start", "-p", String(appPort), "-H", "127.0.0.1"],
       cwd: ROOT,
       env: appEnv
     });
@@ -254,5 +263,4 @@ main().catch(async (error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
 

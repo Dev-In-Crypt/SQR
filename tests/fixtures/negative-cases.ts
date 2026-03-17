@@ -5,7 +5,7 @@ export type NegativeCategory =
 
 export type MatrixInputType = "PASTE_CODE" | "ADDRESS" | "RECEIPT";
 
-export type MatrixTerminalStatus = "COMPLETED" | "DONE_WITH_WARNINGS" | "FAILED" | "BLOCKED_BY_UI";
+export type MatrixTerminalStatus = "COMPLETED" | "DONE_WITH_WARNINGS" | "PARTIAL" | "FAILED" | "BLOCKED_BY_UI";
 
 export interface NegativeCase {
   id: string;
@@ -158,7 +158,7 @@ export const pasteCodeNegativeCases: NegativeCase[] = [
     inputType: "PASTE_CODE",
     payload: VALID_WITH_IMPORT,
     expectedHttpStatus: 202,
-    expectedTerminalStatus: "DONE_WITH_WARNINGS",
+    expectedTerminalStatus: "PARTIAL",
     expectedWarnings: ["IMPORT_STATEMENT_PRESENT"],
     timeoutMs: 12_000,
     runIn: { integration: true, e2e: true, foundry: false }
@@ -281,7 +281,7 @@ export const pasteCodeNegativeCases: NegativeCase[] = [
     inputType: "PASTE_CODE",
     payload: PRAGMA_09,
     expectedHttpStatus: 202,
-    expectedTerminalStatus: "DONE_WITH_WARNINGS",
+    expectedTerminalStatus: "PARTIAL",
     expectedWarnings: ["UNSUPPORTED_PRAGMA_RANGE"],
     timeoutMs: 10_000,
     runIn: { integration: true, e2e: false, foundry: false }
@@ -477,7 +477,7 @@ export const pasteCodeNegativeCases: NegativeCase[] = [
       "}"
     ].join("\n"),
     expectedHttpStatus: 202,
-    expectedTerminalStatus: "DONE_WITH_WARNINGS",
+    expectedTerminalStatus: "PARTIAL",
     expectedWarnings: ["IMPORT_STATEMENT_PRESENT", "RISKY_DELEGATECALL_PRESENT"],
     timeoutMs: 12_000,
     runIn: { integration: true, e2e: false, foundry: false }

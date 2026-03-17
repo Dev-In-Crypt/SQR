@@ -54,6 +54,10 @@ function expectedTerminal(actual: string, expected: MatrixTerminalStatus): boole
     return actual === "DONE_WITH_WARNINGS";
   }
 
+  if (expected === "PARTIAL") {
+    return actual === "PARTIAL";
+  }
+
   if (expected === "FAILED") {
     return actual === "FAILED";
   }

@@ -300,7 +300,7 @@ test("suite B smoke: wrong wallet network triggers switch and mint succeeds", as
   await page.goto(`/r/${created.reportId}`);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint EVM receipt" }).click();
 
   await expect(page.getByRole("heading", { name: "Onchain Receipt" })).toBeVisible();
 
