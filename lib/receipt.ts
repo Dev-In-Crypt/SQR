@@ -12,10 +12,12 @@ import {
 } from "viem";
 
 import {
+  enabledReceiptNetworks,
+  isReceiptChainSupported,
+  receiptContractAddressByChainId,
   explorerBaseUrlForChainId,
   receiptNetworkByChainId,
   requiredReceiptChainId,
-  requiredReceiptNetwork,
   requiredReceiptRpcUrl
 } from "@/lib/base-network";
 import { config } from "@/lib/config";
@@ -32,10 +34,10 @@ import {
 
 export { receiptRegistryAbi };
 
-function configuredReceiptContract(): Address {
-  const value = config.RECEIPT_CONTRACT_ADDRESS;
+function configuredReceiptContract(chainId: number): Address {
+  const value = receiptContractAddressByChainId(chainId);
   if (!value) {
-    throw new ApiError(503, "RECEIPT_UNAVAILABLE", "Receipt contract address is not configured");
+    throw new ApiError(503, "RECEIPT_UNAVAILABLE", `Receipt contract is not configured for chain ${chainId}`);
   }
 
   if (!isAddress(value)) {
@@ -45,31 +47,37 @@ function configuredReceiptContract(): Address {
   return value;
 }
 
-function requiredChainContext() {
-  const network = requiredReceiptNetwork();
+function chainContext(chainId: number) {
+  if (!isReceiptChainSupported(chainId)) {
+    throw new ApiError(400, "INVALID_CHAIN", `Receipt chain ${chainId} is not supported`);
+  }
+
+  const network = receiptNetworkByChainId(chainId);
+  const configuredNetwork = enabledReceiptNetworks().find((item) => item.chainId === chainId);
+  const rpcUrl = configuredNetwork?.rpcUrl;
+
+  if (!rpcUrl) {
+    throw new ApiError(503, "RECEIPT_CHAIN_UNAVAILABLE", `RPC URL is not configured for chain ${chainId}`);
+  }
 
   return {
     chainId: network.chainId,
-    rpcUrl: network.rpcUrl,
+    rpcUrl,
     chain: defineChain({
       id: network.chainId,
       name: network.chainName,
-      nativeCurrency: {
-        name: "Ether",
-        symbol: "ETH",
-        decimals: 18
-      },
+      nativeCurrency: network.nativeCurrency,
       rpcUrls: {
         default: {
-          http: [network.rpcUrl]
+          http: [rpcUrl]
         }
       }
     })
   };
 }
 
-function requiredChainClient() {
-  const context = requiredChainContext();
+function chainClient(chainId: number) {
+  const context = chainContext(chainId);
 
   return createPublicClient({
     chain: context.chain,
@@ -90,13 +98,13 @@ export function analyzerVersionHash(): Hex {
   return hashCanonical({ analyzerVersion: config.ANALYZER_VERSION }) as Hex;
 }
 
-export async function readOwnerMintNonce(owner: string): Promise<bigint> {
+export async function readOwnerMintNonce(owner: string, chainId = requiredReceiptChainId()): Promise<bigint> {
   if (!isAddress(owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
   }
 
-  const receiptContract = configuredReceiptContract();
-  const client = requiredChainClient();
+  const receiptContract = configuredReceiptContract(chainId);
+  const client = chainClient(chainId);
 
   try {
     return await client.readContract({
@@ -138,6 +146,7 @@ export async function prepareMintAuthorization(params: {
   contractAddress?: string | null;
   owner: string;
   ttlSeconds?: number;
+  targetChainId?: number;
 }): Promise<{
   typedData: ReturnType<typeof buildMintAuthorizationRpcTypedData>;
   call: {
@@ -154,16 +163,16 @@ export async function prepareMintAuthorization(params: {
     };
   };
 }> {
-  const receiptContract = configuredReceiptContract();
+  const chainId = params.targetChainId ?? requiredReceiptChainId();
+  const receiptContract = configuredReceiptContract(chainId);
 
   if (!isAddress(params.owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
   }
 
   const owner = params.owner as Address;
-  const nonce = await readOwnerMintNonce(owner);
+  const nonce = await readOwnerMintNonce(owner, chainId);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + (params.ttlSeconds ?? 600));
-  const chainId = requiredReceiptChainId();
 
   const message: MintAuthorizationMessage = {
     reportHash: params.reportHash as Hex,
@@ -198,7 +207,7 @@ export async function prepareMintAuthorization(params: {
   };
 }
 
-export async function readMintedReceiptByHash(reportHash: string): Promise<
+export async function readMintedReceiptByHash(reportHash: string, chainId = requiredReceiptChainId()): Promise<
   | { exists: false }
   | {
       exists: true;
@@ -209,8 +218,8 @@ export async function readMintedReceiptByHash(reportHash: string): Promise<
       timestamp: Date;
     }
 > {
-  const receiptContract = configuredReceiptContract();
-  const client = requiredChainClient();
+  const receiptContract = configuredReceiptContract(chainId);
+  const client = chainClient(chainId);
 
   try {
     const result = await client.readContract({
@@ -267,8 +276,10 @@ export async function recoverMintAuthorizationSigner(params: {
   nonce: string;
   deadline: string;
   signature: string;
+  chainId?: number;
 }): Promise<Address> {
-  const receiptContract = configuredReceiptContract();
+  const chainId = params.chainId ?? requiredReceiptChainId();
+  const receiptContract = configuredReceiptContract(chainId);
 
   if (!isAddress(params.owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
@@ -279,7 +290,7 @@ export async function recoverMintAuthorizationSigner(params: {
   }
 
   const typedData = buildMintAuthorizationTypedData({
-    chainId: requiredReceiptChainId(),
+    chainId,
     verifyingContract: receiptContract,
     message: {
       reportHash: params.reportHash as Hex,
@@ -300,8 +311,11 @@ export async function recoverMintAuthorizationSigner(params: {
   });
 }
 
-export async function hasTransactionReceiptOnRequiredChain(txHash: string): Promise<boolean> {
-  const client = requiredChainClient();
+export async function hasTransactionReceiptOnRequiredChain(
+  txHash: string,
+  chainId = requiredReceiptChainId()
+): Promise<boolean> {
+  const client = chainClient(chainId);
 
   try {
     await client.getTransactionReceipt({ hash: txHash as Hex });
@@ -315,7 +329,7 @@ export async function hasTransactionReceiptOnRequiredChain(txHash: string): Prom
   }
 }
 
-export async function readMintedEventFromTx(txHash: string): Promise<{
+export async function readMintedEventFromTx(txHash: string, chainId = requiredReceiptChainId()): Promise<{
   reportHash: string;
   contractAddress: string;
   owner: string;
@@ -323,8 +337,8 @@ export async function readMintedEventFromTx(txHash: string): Promise<{
   timestamp: Date;
   receiptId: string;
 } | null> {
-  const client = requiredChainClient();
-  const expectedContract = configuredReceiptContract().toLowerCase();
+  const client = chainClient(chainId);
+  const expectedContract = configuredReceiptContract(chainId).toLowerCase();
 
   let txReceipt;
   try {

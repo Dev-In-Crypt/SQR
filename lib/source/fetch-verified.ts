@@ -25,6 +25,12 @@ interface BaseScanPayload {
   result: BaseScanResultItem[] | string;
 }
 
+interface BlockscoutPayload {
+  status?: string;
+  message?: string;
+  result?: BaseScanResultItem[] | string;
+}
+
 interface VerifiedSourceResponse {
   verified: boolean;
   files: SourceFile[];
@@ -380,6 +386,134 @@ function mockSourcifyResponse(chainId: number, address: string): VerifiedSourceR
   };
 }
 
+function blockscoutApiUrlForChain(chainId: number): string | null {
+  if (!config.polkadotHubEnabled) {
+    return null;
+  }
+
+  if (chainId === config.POLKADOT_HUB_TESTNET_CHAIN_ID) {
+    return `${config.POLKADOT_HUB_TESTNET_EXPLORER_URL.replace(/\/+$/, "")}/api`;
+  }
+
+  if (chainId === config.POLKADOT_HUB_MAINNET_CHAIN_ID) {
+    return `${config.POLKADOT_HUB_MAINNET_EXPLORER_URL.replace(/\/+$/, "")}/api`;
+  }
+
+  return null;
+}
+
+function classifyBlockscoutReason(reason: string): string {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("contract source code not verified") || normalized.includes("not verified")) {
+    return "SOURCE_UNVERIFIED";
+  }
+
+  if (normalized.includes("rate limit") || normalized.includes("too many requests")) {
+    return "BLOCKSCOUT_RATE_LIMIT";
+  }
+
+  return "BLOCKSCOUT_NOTOK";
+}
+
+async function fetchFromBlockscout(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+  const apiBase = blockscoutApiUrlForChain(chainId);
+  if (!apiBase) {
+    return {
+      verified: false,
+      files: [],
+      metadata: {},
+      reason: "SOURCE_UNVERIFIED"
+    };
+  }
+
+  const url = new URL(apiBase);
+  url.searchParams.set("module", "contract");
+  url.searchParams.set("action", "getsourcecode");
+  url.searchParams.set("address", address);
+
+  let response: Response;
+
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      cache: "no-store",
+      signal: AbortSignal.timeout(config.SOURCE_FETCH_TIMEOUT_MS)
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return {
+        verified: false,
+        files: [],
+        metadata: { sourceProvider: "blockscout", url: url.toString() },
+        reason: "BLOCKSCOUT_TIMEOUT"
+      };
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    return {
+      verified: false,
+      files: [],
+      metadata: { sourceProvider: "blockscout", url: url.toString() },
+      reason: `BLOCKSCOUT_HTTP_${response.status}`
+    };
+  }
+
+  let payload: BlockscoutPayload;
+  try {
+    payload = (await response.json()) as BlockscoutPayload;
+  } catch {
+    return {
+      verified: false,
+      files: [],
+      metadata: { sourceProvider: "blockscout", url: url.toString() },
+      reason: "BLOCKSCOUT_MALFORMED_JSON"
+    };
+  }
+
+  if (!Array.isArray(payload.result)) {
+    const reasonMessage =
+      typeof payload.result === "string" && payload.result.trim().length > 0
+        ? payload.result
+        : payload.message || "NOTOK";
+
+    return {
+      verified: false,
+      files: [],
+      metadata: {
+        sourceProvider: "blockscout",
+        status: payload.status,
+        message: payload.message,
+        reasonMessage
+      },
+      reason: classifyBlockscoutReason(reasonMessage)
+    };
+  }
+
+  const item = payload.result[0];
+  if (!item?.SourceCode || item.SourceCode.trim().length === 0) {
+    return {
+      verified: false,
+      files: [],
+      metadata: { sourceProvider: "blockscout" },
+      reason: "SOURCE_UNVERIFIED"
+    };
+  }
+
+  const files = extractFilesFromBaseScanSource(item.SourceCode);
+  return {
+    verified: files.length > 0,
+    files,
+    metadata: {
+      sourceProvider: "blockscout",
+      contractName: item.ContractName,
+      compilerVersion: item.CompilerVersion
+    },
+    reason: files.length > 0 ? undefined : "SOURCE_UNVERIFIED"
+  };
+}
+
 async function fetchFromSourcify(chainId: number, address: string): Promise<VerifiedSourceResponse> {
   if (usingSourceStub()) {
     return mockSourcifyResponse(chainId, address);
@@ -486,7 +620,14 @@ export async function fetchVerifiedSource(params: {
     return sourcify;
   }
 
-  const reasons = [basescan.reason, sourcify.reason].filter((value): value is string => Boolean(value));
+  const blockscout = await fetchFromBlockscout(chainId, address);
+  if (blockscout.verified) {
+    return blockscout;
+  }
+
+  const reasons = [basescan.reason, sourcify.reason, blockscout.reason].filter(
+    (value): value is string => Boolean(value)
+  );
   const preferredReason = reasons.find((value) => value !== "SOURCE_UNVERIFIED") ?? "SOURCE_UNVERIFIED";
 
   return {
@@ -494,7 +635,8 @@ export async function fetchVerifiedSource(params: {
     files: [],
     metadata: {
       basescanReason: basescan.reason,
-      sourcifyReason: sourcify.reason
+      sourcifyReason: sourcify.reason,
+      blockscoutReason: blockscout.reason
     },
     reason: preferredReason
   };

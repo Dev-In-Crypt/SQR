@@ -44,8 +44,13 @@ const uintString = z.string().regex(/^\d+$/, "must be an unsigned integer string
 
 export const receiptConfirmSchema = z.object({
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, "txHash must be a 32-byte hex string"),
+  chainId: z.number().int().positive().optional(),
   owner: hexAddress,
   nonce: uintString,
   deadline: uintString,
   signature: hexBytes
+});
+
+export const receiptPrepareSchema = z.object({
+  targetChainId: z.number().int().positive().optional()
 });

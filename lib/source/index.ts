@@ -167,13 +167,13 @@ export function computeInputHash(params: {
 }
 
 export function enforceAddressChain(chainId: number): void {
-  const allowed = [config.BASE_CHAIN_ID, config.STAGING_BASE_CHAIN_ID];
+  const allowed = config.supportedAddressChainIds;
   if (!allowed.includes(chainId)) {
-    throw new ApiError(400, "INVALID_CHAIN", "Only Base mainnet or Base Sepolia are supported");
+    throw new ApiError(400, "INVALID_CHAIN", "Chain is not enabled for address-based analysis");
   }
 
-  if (config.APP_ENV === "production" && chainId !== config.BASE_CHAIN_ID) {
-    throw new ApiError(400, "INVALID_CHAIN", "Production only accepts Base mainnet chainId 8453");
+  if (config.APP_ENV === "production" && chainId === config.STAGING_BASE_CHAIN_ID) {
+    throw new ApiError(400, "INVALID_CHAIN", "Production does not accept staging-only chain IDs");
   }
 }
 

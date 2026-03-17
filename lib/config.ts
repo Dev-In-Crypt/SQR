@@ -13,6 +13,17 @@ const envSchema = z.object({
   BASE_RPC_URL: z.string().optional(),
   BASE_MAINNET_RPC_URL: z.string().optional(),
   BASE_SEPOLIA_RPC_URL: z.string().optional(),
+  POLKADOT_HUB_TESTNET_CHAIN_ID: z.coerce.number().default(420420417),
+  POLKADOT_HUB_MAINNET_CHAIN_ID: z.coerce.number().default(420420419),
+  POLKADOT_HUB_TESTNET_RPC_URL: z.string().url().default("https://eth-rpc-testnet.polkadot.io/"),
+  POLKADOT_HUB_MAINNET_RPC_URL: z.string().url().default("https://eth-rpc.polkadot.io/"),
+  POLKADOT_HUB_TESTNET_EXPLORER_URL: z.string().url().default("https://blockscout-testnet.polkadot.io"),
+  POLKADOT_HUB_MAINNET_EXPLORER_URL: z.string().url().default("https://blockscout.polkadot.io"),
+  POLKADOT_HUB_TESTNET_RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
+  POLKADOT_HUB_MAINNET_RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
+  FEATURE_POLKADOT_HUB_ENABLED: z.string().default("false"),
+  FEATURE_RECEIPT_POLKADOT_HUB_ENABLED: z.string().default("false"),
+  RECEIPT_DEFAULT_CHAIN_ID: z.coerce.number().optional(),
   BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
   SOURCIFY_API_URL: z
@@ -86,6 +97,10 @@ function ensureProductionConfig(env: z.infer<typeof envSchema>): void {
   }
 }
 
+function parseBoolean(value: string): boolean {
+  return value.trim().toLowerCase() === "true";
+}
+
 function parseEnv(rawEnv: NodeJS.ProcessEnv): z.infer<typeof envSchema> {
   const parsed = envSchema.safeParse(rawEnv);
   if (!parsed.success) {
@@ -103,6 +118,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
   const env = parseEnv(rawEnv);
   const openAiGeneralModel = env.OPENAI_GENERAL_MODEL?.trim() || env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
   const openAiAuditModel = env.OPENAI_AUDIT_MODEL?.trim() || openAiGeneralModel;
+  const polkadotHubEnabled = parseBoolean(env.FEATURE_POLKADOT_HUB_ENABLED);
+  const polkadotHubReceiptEnabled = parseBoolean(env.FEATURE_RECEIPT_POLKADOT_HUB_ENABLED);
 
   return {
     ...env,
@@ -115,7 +132,14 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       .filter((item) => item.length > 0),
     isProd: env.NODE_ENV === "production",
     slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true",
-    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true"
+    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true",
+    polkadotHubEnabled,
+    polkadotHubReceiptEnabled,
+    supportedAddressChainIds: [
+      env.BASE_CHAIN_ID,
+      env.STAGING_BASE_CHAIN_ID,
+      ...(polkadotHubEnabled ? [env.POLKADOT_HUB_TESTNET_CHAIN_ID, env.POLKADOT_HUB_MAINNET_CHAIN_ID] : [])
+    ]
   };
 }
 

@@ -1,16 +1,21 @@
+import { z } from "zod";
+
 import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
 import { prepareMintAuthorization, readMintedReceiptByHash } from "@/lib/receipt";
 import { getSessionContext } from "@/lib/session";
+import { receiptPrepareSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ reportId: string }> }
 ) {
   try {
+    const raw = await request.text();
+    const payload = receiptPrepareSchema.parse(raw ? (JSON.parse(raw) as unknown) : {});
     const { reportId } = await context.params;
     const session = await getSessionContext();
 
@@ -55,7 +60,7 @@ export async function POST(
       });
     }
 
-    const onchainReceipt = await readMintedReceiptByHash(report.reportHash);
+    const onchainReceipt = await readMintedReceiptByHash(report.reportHash, payload.targetChainId);
     if (
       onchainReceipt.exists &&
       onchainReceipt.owner.toLowerCase() !== session.walletAddress.toLowerCase()
@@ -75,7 +80,8 @@ export async function POST(
       reportHash: report.reportHash,
       contractAddress: reportJson.metadata?.contractAddress ?? null,
       owner: session.walletAddress,
-      ttlSeconds: 10 * 60
+      ttlSeconds: 10 * 60,
+      targetChainId: payload.targetChainId
     });
 
     return ok({
@@ -84,6 +90,10 @@ export async function POST(
       call: prepared.call
     });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return fail(400, "INVALID_PAYLOAD", error.issues.map((issue) => issue.message).join("; "));
+    }
+
     return handleRouteError(error, {
       route: "POST /api/v1/receipt/:reportId/prepare"
     });
