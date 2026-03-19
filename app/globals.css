@@ -593,8 +593,88 @@ main > section.stack.page-container {
 }
 
 .home-network-select {
-  border-color: rgba(255, 255, 255, 0.2);
+  position: relative;
+}
+
+.home-network-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
   background: linear-gradient(180deg, #11110f 0%, #0b0b0a 100%);
+  color: #f5f3ec;
+  font: inherit;
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.home-network-trigger:hover {
+  border-color: rgba(255, 183, 0, 0.48);
+}
+
+.home-network-trigger:focus-visible {
+  border-color: rgba(255, 183, 0, 0.62);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  outline: none;
+}
+
+.home-network-caret {
+  color: var(--brand);
+  font-size: 0.9rem;
+  transition: transform 0.2s ease;
+}
+
+.home-network-caret.is-open {
+  transform: rotate(180deg);
+}
+
+.home-network-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #171614 0%, #0f0f0e 100%);
+  box-shadow: var(--shadow-soft);
+  padding: 6px;
+}
+
+.home-network-option {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #ebe9e1;
+  font: inherit;
+  text-align: left;
+  padding: 9px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.home-network-option:hover {
+  border-color: rgba(255, 183, 0, 0.34);
+  background: rgba(255, 183, 0, 0.1);
+  color: #fff8e0;
+}
+
+.home-network-option.is-selected {
+  border-color: rgba(198, 251, 80, 0.45);
+  background: rgba(198, 251, 80, 0.12);
+  color: #f4ffd8;
+}
+
+.home-network-option:focus-visible {
+  outline: none;
+  border-color: rgba(255, 183, 0, 0.62);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .home-network-hint {

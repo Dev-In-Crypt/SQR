@@ -2,6 +2,7 @@ import { ok, handleRouteError } from "@/lib/api";
 import {
   enabledAnalysisNetworks,
   enabledReceiptNetworks,
+  isPolkadotHubChainId,
   requiredReceiptAddEthereumChainParams,
   requiredReceiptNetwork
 } from "@/lib/base-network";
@@ -16,13 +17,18 @@ export async function GET() {
     return ok({
       analysis: {
         defaultChainId: config.BASE_CHAIN_ID,
-        supportedNetworks: enabledAnalysisNetworks().map((item) => ({
-          chainId: item.chainId,
-          chainHex: item.chainHex,
-          name: item.chainName,
-          label: item.label,
-          blockExplorerUrl: item.blockExplorerUrl
-        }))
+        supportedNetworks: enabledAnalysisNetworks()
+          .filter(
+            (item) => !isPolkadotHubChainId(item.chainId) || item.chainId === config.POLKADOT_HUB_TESTNET_CHAIN_ID
+          )
+          .map((item) => ({
+            chainId: item.chainId,
+            chainHex: item.chainHex,
+            name: item.chainName,
+            label: item.label,
+            blockExplorerUrl: item.blockExplorerUrl,
+            isPolkadotHub: isPolkadotHubChainId(item.chainId)
+          }))
       },
       receipt: {
         requiredChainId: network.chainId,

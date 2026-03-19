@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { isAddress } from "viem";
 
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
@@ -21,6 +21,7 @@ interface RuntimeConfigResponse {
       name: string;
       chainHex: `0x${string}`;
       blockExplorerUrl: string;
+      isPolkadotHub?: boolean;
     }>;
   };
 }
@@ -28,9 +29,10 @@ interface RuntimeConfigResponse {
 interface AnalysisNetworkOption {
   chainId: number;
   label: string;
+  isPolkadotHub: boolean;
 }
 
-const DEFAULT_ANALYSIS_NETWORKS: AnalysisNetworkOption[] = [{ chainId: 8453, label: "Base" }];
+const DEFAULT_ANALYSIS_NETWORKS: AnalysisNetworkOption[] = [{ chainId: 8453, label: "Base", isPolkadotHub: false }];
 
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
@@ -48,6 +50,8 @@ export default function HomeForm() {
   const [showAddressWarning, setShowAddressWarning] = useState(false);
   const [networkOptions, setNetworkOptions] = useState<AnalysisNetworkOption[]>(DEFAULT_ANALYSIS_NETWORKS);
   const [selectedChainId, setSelectedChainId] = useState<number>(DEFAULT_ANALYSIS_NETWORKS[0].chainId);
+  const [networkMenuOpen, setNetworkMenuOpen] = useState(false);
+  const networkMenuRef = useRef<HTMLDivElement | null>(null);
 
   const trimmedCode = code.trim();
   const trimmedAddress = address.trim();
@@ -55,6 +59,8 @@ export default function HomeForm() {
     () => networkOptions.find((item) => item.chainId === selectedChainId)?.label || `Chain ${selectedChainId}`,
     [networkOptions, selectedChainId]
   );
+  const selectedNetworkIsPolkadotHub =
+    networkOptions.find((item) => item.chainId === selectedChainId)?.isPolkadotHub || false;
 
   const snippetCompleteness = useMemo(() => analyzeSnippetCompleteness(code), [code]);
   const snippetIncomplete = !snippetCompleteness.isComplete;
@@ -82,7 +88,7 @@ export default function HomeForm() {
 
       const payload = (await response.json()) as RuntimeConfigResponse;
       const supported = (payload.analysis?.supportedNetworks || [])
-        .map((item) => ({ chainId: item.chainId, label: item.label }))
+        .map((item) => ({ chainId: item.chainId, label: item.label, isPolkadotHub: item.isPolkadotHub === true }))
         .filter((item) => Number.isInteger(item.chainId));
 
       if (supported.length === 0) {
@@ -117,6 +123,29 @@ export default function HomeForm() {
 
     window.addEventListener("sqr:session-changed", onSessionChanged);
     return () => window.removeEventListener("sqr:session-changed", onSessionChanged);
+  }, []);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (networkMenuRef.current && !networkMenuRef.current.contains(target)) {
+        setNetworkMenuOpen(false);
+      }
+    };
+
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setNetworkMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
   }, []);
 
   useEffect(() => {
@@ -262,24 +291,53 @@ export default function HomeForm() {
 
       <div className="stack home-tab-panel">
         <label className="stack home-input-group">
-          <span>EVM network</span>
-          <select
-            className="select home-network-select"
-            value={String(selectedChainId)}
-            onChange={(event) => setSelectedChainId(Number(event.target.value))}
-          >
-            {networkOptions.map((network) => (
-              <option key={network.chainId} value={network.chainId}>
-                {network.label}
-              </option>
-            ))}
-          </select>
-          <span className="muted home-network-hint">Selected network: {selectedNetworkLabel}</span>
+          <span>Analysis network</span>
+          <div className="home-network-select" ref={networkMenuRef}>
+            <button
+              type="button"
+              className="home-network-trigger"
+              aria-haspopup="listbox"
+              aria-expanded={networkMenuOpen}
+              onClick={() => setNetworkMenuOpen((current) => !current)}
+            >
+              <span>{selectedNetworkLabel}</span>
+              <span className={`home-network-caret ${networkMenuOpen ? "is-open" : ""}`} aria-hidden>
+                ▾
+              </span>
+            </button>
+
+            {networkMenuOpen ? (
+              <div className="home-network-menu" role="listbox" aria-label="EVM network">
+                {networkOptions.map((network) => (
+                  <button
+                    key={network.chainId}
+                    type="button"
+                    role="option"
+                    aria-selected={network.chainId === selectedChainId}
+                    className={`home-network-option ${network.chainId === selectedChainId ? "is-selected" : ""}`}
+                    onClick={() => {
+                      setSelectedChainId(network.chainId);
+                      setNetworkMenuOpen(false);
+                    }}
+                  >
+                    {network.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <span className="muted home-network-hint">
+            Selected network: {selectedNetworkLabel}
+            {selectedNetworkIsPolkadotHub ? " (PVM sidecar checks enabled)" : ""}
+          </span>
         </label>
 
         {tab === "PASTE_CODE" ? (
           <label className="stack home-input-group">
             <span>Solidity snippet (max 200 lines)</span>
+            {selectedNetworkIsPolkadotHub ? (
+              <span className="muted">Paste Solidity code compiled for Polkadot Hub.</span>
+            ) : null}
             <textarea
               className="textarea home-textarea"
               aria-invalid={showSnippetWarning}

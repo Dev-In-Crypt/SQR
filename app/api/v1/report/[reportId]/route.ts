@@ -49,14 +49,25 @@ export async function GET(
     }
 
     const owner = isReportOwner(report, viewer);
-    const reportPayload = report.reportJson as unknown as ReportPayload;
+    const rawReportPayload = report.reportJson as unknown as ReportPayload;
+    const reportPayload: ReportPayload = {
+      ...rawReportPayload,
+      pvmScan: rawReportPayload?.pvmScan ?? null
+    };
     const visibleReport: ReportPayload = owner
       ? reportPayload
       : {
           ...reportPayload,
           warnings: [],
           scannerErrors: [],
-          partialReasons: []
+          partialReasons: [],
+          pvmScan: reportPayload.pvmScan
+            ? {
+                ...reportPayload.pvmScan,
+                warnings: [],
+                errors: []
+              }
+            : null
         };
     const receipt = report.receipt
       ? {

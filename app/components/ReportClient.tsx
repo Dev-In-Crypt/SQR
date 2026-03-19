@@ -50,6 +50,34 @@ interface ReportApiResponse {
     warnings: string[];
     scannerErrors: string[];
     partialReasons: string[];
+    pvmScan: {
+      enabled: boolean;
+      chainId: number;
+      compiler: string;
+      status: "COMPLETED" | "FAILED";
+      bytecodeBytes: number | null;
+      warnings: Array<{
+        id: string;
+        code: string;
+        title: string;
+        severity: Severity;
+        source: "compiler" | "pattern" | "bytecode";
+        message: string;
+        evidence: string;
+        explanation: string;
+        fixDirection: string;
+        blocking: boolean;
+      }>;
+      errors: string[];
+      comparison: {
+        evmFindings: number;
+        evmWarnings: number;
+        evmScannerErrors: number;
+        pvmWarnings: number;
+        pvmBlockingWarnings: number;
+        pvmErrors: number;
+      };
+    } | null;
   };
   receipt: {
     txHash: string;
@@ -637,6 +665,8 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     return data.report.findings;
   }, [data]);
 
+  const pvmScan = data?.report.pvmScan ?? null;
+
   const coverage = useMemo(() => {
     if (!data) {
       return null;
@@ -1016,6 +1046,85 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 {SCANNER_SUMMARY_NOTES[Math.min(DEFAULT_SCANNER_SUMMARY_NOTE_INDEX, SCANNER_SUMMARY_NOTES.length - 1)]}
               </p>
             </div>
+
+            {pvmScan ? (
+              <div className="stack">
+                <h2 style={{ margin: 0 }}>EVM scan vs PVM scan</h2>
+                <div className="grid-2">
+                  <div>
+                    <strong>PVM compiler:</strong> {pvmScan.compiler}
+                  </div>
+                  <div>
+                    <strong>PVM status:</strong> {pvmScan.status}
+                  </div>
+                  <div>
+                    <strong>EVM findings:</strong> {pvmScan.comparison.evmFindings}
+                  </div>
+                  <div>
+                    <strong>EVM warnings:</strong> {pvmScan.comparison.evmWarnings}
+                  </div>
+                  <div>
+                    <strong>EVM scanner errors:</strong> {pvmScan.comparison.evmScannerErrors}
+                  </div>
+                  <div>
+                    <strong>PVM warnings:</strong> {pvmScan.comparison.pvmWarnings}
+                  </div>
+                  <div>
+                    <strong>PVM blocking warnings:</strong> {pvmScan.comparison.pvmBlockingWarnings}
+                  </div>
+                  <div>
+                    <strong>PVM errors:</strong> {pvmScan.comparison.pvmErrors}
+                  </div>
+                  <div>
+                    <strong>Max bytecode size:</strong> {pvmScan.bytecodeBytes ? `${pvmScan.bytecodeBytes} bytes` : "n/a"}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {pvmScan ? (
+              <div className="stack">
+                <h2 style={{ margin: 0 }}>PVM-specific warnings ({pvmScan.warnings.length})</h2>
+                {pvmScan.warnings.length === 0 ? <div>No PVM-specific warnings were reported for this scan.</div> : null}
+
+                {pvmScan.warnings.map((warning) => (
+                  <details key={warning.id} className="card">
+                    <summary className="row" style={{ cursor: "pointer" }}>
+                      <span className={`badge ${warning.severity}`}>{warning.severity}</span>
+                      <strong>{warning.title}</strong>
+                      {warning.blocking ? <span className="badge">blocking</span> : null}
+                    </summary>
+
+                    <div className="stack" style={{ marginTop: 10 }}>
+                      <div>
+                        <strong>Code:</strong> {warning.code}
+                      </div>
+                      <div>
+                        <strong>Explanation:</strong> {warning.explanation}
+                      </div>
+                      <div>
+                        <strong>Fix direction:</strong> {warning.fixDirection}
+                      </div>
+                      <div>
+                        <strong>Compiler signal:</strong> {warning.message}
+                      </div>
+                      <div>
+                        <strong>Evidence:</strong> {warning.evidence}
+                      </div>
+                    </div>
+                  </details>
+                ))}
+
+                {pvmScan.errors.length > 0 ? (
+                  <div className="card error stack">
+                    <strong>PVM scanner diagnostics</strong>
+                    {pvmScan.errors.map((entry, index) => (
+                      <div key={`${entry}-${index}`}>{entry}</div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {data.isOwner ? (
               <div className="stack">
