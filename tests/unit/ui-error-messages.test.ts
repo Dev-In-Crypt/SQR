@@ -10,6 +10,13 @@ describe("analysis error message mapping", () => {
     expect(details.category).toBe("CONTRACT_NOT_VERIFIED");
   });
 
+  it("maps basescan_notok to contract not verified", () => {
+    const details = resolveAnalysisErrorDetails("BASESCAN_NOTOK");
+
+    expect(details.title).toBe("Contract not verified");
+    expect(details.category).toBe("CONTRACT_NOT_VERIFIED");
+  });
+
   it("maps source retrieval provider codes", () => {
     const details = resolveAnalysisErrorDetails("BASESCAN_TIMEOUT");
 

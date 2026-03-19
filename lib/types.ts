@@ -15,7 +15,10 @@ export type PipelineStage =
   | "RUNNING_AI_AUDIT"
   | "GENERATING_REPORT";
 
-export type PartialReasonCode = "PARTIAL_SOLIDITY_INCOMPLETE" | "PARTIAL_SCANNER_FAILURE";
+export type PartialReasonCode =
+  | "PARTIAL_SOLIDITY_INCOMPLETE"
+  | "PARTIAL_SCANNER_FAILURE"
+  | "PARTIAL_PVM_SCANNER_FAILURE";
 
 export type InputType = "PASTE_CODE" | "BASE_ADDRESS";
 export type Visibility = "PRIVATE" | "PUBLIC";
@@ -67,7 +70,43 @@ export interface ReportPayload {
   warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];
+  pvmScan: PvmScanResult | null;
   reportHash: string;
+}
+
+export type PvmWarningSource = "compiler" | "pattern" | "bytecode";
+
+export interface PvmWarning {
+  id: string;
+  code: string;
+  title: string;
+  severity: Severity;
+  source: PvmWarningSource;
+  message: string;
+  evidence: string;
+  explanation: string;
+  fixDirection: string;
+  blocking: boolean;
+}
+
+export interface PvmComparison {
+  evmFindings: number;
+  evmWarnings: number;
+  evmScannerErrors: number;
+  pvmWarnings: number;
+  pvmBlockingWarnings: number;
+  pvmErrors: number;
+}
+
+export interface PvmScanResult {
+  enabled: boolean;
+  chainId: number;
+  compiler: string;
+  status: "COMPLETED" | "FAILED";
+  bytecodeBytes: number | null;
+  warnings: PvmWarning[];
+  errors: string[];
+  comparison: PvmComparison;
 }
 
 export interface SourceFile {

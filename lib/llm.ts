@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { setTimeout as delay } from "node:timers/promises";
 
-import type { AIAuditFinding, Finding, SourceBundle, StructuredAuditContext } from "@/lib/types";
+import type { AIAuditFinding, Finding, PvmWarning, SourceBundle, StructuredAuditContext } from "@/lib/types";
 import * as contractStructure from "@/lib/contract-structure";
 import { filterAIAuditFindings } from "@/lib/ai-audit-post-filter";
 import { config } from "@/lib/config";
@@ -46,6 +46,14 @@ const aiAuditArrayResponseSchema = z.array(aiAuditFindingSchema);
 const aiAuditObjectResponseSchema = z.object({
   findings: z.array(aiAuditFindingSchema).default([])
 });
+
+const pvmWarningExplanationSchema = z.object({
+  id: z.string().trim().min(1),
+  explanation: z.string().trim().min(1).max(1200),
+  fixDirection: z.string().trim().min(1).max(600)
+});
+
+const pvmWarningExplanationArraySchema = z.array(pvmWarningExplanationSchema);
 
 function openAiHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -373,5 +381,104 @@ export async function generateAIAuditFindings(params: {
       endpoint
     });
     return [];
+  }
+}
+
+export async function explainPvmWarnings(params: {
+  warnings: PvmWarning[];
+  chainId: number;
+}): Promise<PvmWarning[]> {
+  if (params.warnings.length === 0 || !config.OPENAI_API_KEY) {
+    return params.warnings;
+  }
+
+  const payload = {
+    model: config.OPENAI_GENERAL_MODEL,
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You explain Polkadot Hub PVM compiler/security warnings. Return JSON array only. For each warning id, provide concise explanation and a concrete fix direction. Do not invent new warnings."
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          instructions: {
+            returnJson: true,
+            format: [{ id: "string", explanation: "string", fixDirection: "string" }],
+            includeOnlyGivenIds: true
+          },
+          input: {
+            chainId: params.chainId,
+            warnings: params.warnings.map((warning) => ({
+              id: warning.id,
+              code: warning.code,
+              title: warning.title,
+              severity: warning.severity,
+              source: warning.source,
+              message: warning.message,
+              evidence: warning.evidence,
+              blocking: warning.blocking
+            }))
+          }
+        })
+      }
+    ]
+  };
+
+  const endpoint = openAiEndpoint();
+  const headers = openAiHeaders();
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.OPENAI_EXEC_SUMMARY_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logError("PVM warning explanation request failed", { status: response.status, body, endpoint });
+      return params.warnings;
+    }
+
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const content = json.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      return params.warnings;
+    }
+
+    const normalized = maybeStripJsonCodeFence(content);
+    const parsed = JSON.parse(normalized) as unknown;
+    const validated = pvmWarningExplanationArraySchema.safeParse(parsed);
+    if (!validated.success) {
+      return params.warnings;
+    }
+
+    const byId = new Map(validated.data.map((item) => [item.id, item]));
+
+    return params.warnings.map((warning) => {
+      const aiExplanation = byId.get(warning.id);
+      if (!aiExplanation) {
+        return warning;
+      }
+
+      return {
+        ...warning,
+        explanation: aiExplanation.explanation,
+        fixDirection: aiExplanation.fixDirection
+      };
+    });
+  } catch (error) {
+    logError("PVM warning explanation request exception", {
+      message: error instanceof Error ? error.message : String(error),
+      endpoint
+    });
+    return params.warnings;
   }
 }

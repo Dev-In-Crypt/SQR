@@ -13,6 +13,9 @@ export const UI_ERROR_MESSAGES: Record<string, string> = {
   BASESCAN_HTTP_503: "Source provider is temporarily unavailable. Please retry.",
   SOURCIFY_TIMEOUT: "Source provider timeout. Please retry.",
   COMPILATION_FAILED: "Source compilation failed in the analysis environment.",
+  PVM_COMPILER_NOT_FOUND: "PVM compiler is not available in the analysis environment.",
+  PVM_COMPILATION_FAILED: "PVM compilation checks failed for the selected network.",
+  PVM_OUTPUT_PARSE_FAILED: "PVM compiler output could not be parsed.",
   ANALYSIS_PROCESSING_FAILED: "Analysis could not be completed due to an internal processing issue.",
   OWNER_MISMATCH: "Connected wallet does not match the report owner. Switch wallet and retry.",
   OWNER_MISMATCH_ONCHAIN: "This report hash is already minted onchain for another wallet.",
@@ -56,8 +59,8 @@ const ANALYSIS_ERROR_TEMPLATES: Record<AnalysisErrorCategory, AnalysisErrorTempl
   },
   CONTRACT_NOT_VERIFIED: {
     title: "Contract not verified",
-    message: "Verified source is not available for this contract on the selected network.",
-    hint: "Use a verified contract address or submit a snippet."
+    message: "Contract source could not be retrieved because this contract address is not verified in the selected network explorer.",
+    hint: "Verify the contract in explorer, or run analysis via Paste Code."
   },
   COMPILATION_FAILURE: {
     title: "Compilation failure",
@@ -95,6 +98,9 @@ const SOURCE_RETRIEVAL_CODES = new Set([
 
 const COMPILATION_CODES = new Set([
   "COMPILATION_FAILED",
+  "PVM_COMPILER_NOT_FOUND",
+  "PVM_COMPILATION_FAILED",
+  "PVM_OUTPUT_PARSE_FAILED",
   "SLITHER_COMPILATION_FAILED",
   "SLITHER_RUNTIME_FAILURE",
   "SOLC_NOT_FOUND",
@@ -105,7 +111,7 @@ export function resolveAnalysisErrorDetails(code?: string | null): AnalysisError
   const normalizedCode = code?.trim() || null;
 
   let category: AnalysisErrorCategory = "INTERNAL_PROCESSING_ERROR";
-  if (normalizedCode === "SOURCE_UNVERIFIED") {
+  if (normalizedCode === "SOURCE_UNVERIFIED" || normalizedCode === "BASESCAN_NOTOK") {
     category = "CONTRACT_NOT_VERIFIED";
   } else if (normalizedCode?.startsWith("BASESCAN_HTTP_") || normalizedCode?.startsWith("SOURCIFY_HTTP_")) {
     category = "SOURCE_RETRIEVAL_ERROR";

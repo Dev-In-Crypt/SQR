@@ -1,7 +1,10 @@
 import { Prisma, Severity } from "@prisma/client";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { isPolkadotHubChainId } from "@/lib/base-network";
 import { config } from "@/lib/config";
+import { explainPvmWarnings } from "@/lib/llm";
+import { runPvmScan } from "@/lib/pvm-scanner";
 import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
@@ -11,6 +14,7 @@ import { runStaticScan } from "@/lib/scanner";
 import type {
   AnalysisStatus,
   Finding,
+  PvmScanResult,
   PipelineStage,
   ScannerOutput,
   SnippetCompleteness,
@@ -447,9 +451,40 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
 
     const warnings = [...pasteWarnings, ...sourceWarnings, ...staticScan.warnings];
     const partialReasons: string[] = [];
+    let pvmScanResult: PvmScanResult | null = null;
 
     if (staticScan.scannerErrors.length > 0) {
       partialReasons.push("PARTIAL_SCANNER_FAILURE");
+    }
+
+    if (isPolkadotHubChainId(sourceBundle.chainId)) {
+      const pvmScan = await runPvmScan(sourceBundle);
+      const explainedWarnings = await explainPvmWarnings({
+        warnings: pvmScan.warnings,
+        chainId: sourceBundle.chainId
+      });
+
+      pvmScanResult = {
+        enabled: true,
+        chainId: sourceBundle.chainId,
+        compiler: pvmScan.compiler,
+        status: pvmScan.status,
+        bytecodeBytes: pvmScan.bytecodeBytes,
+        warnings: explainedWarnings,
+        errors: pvmScan.errors,
+        comparison: {
+          evmFindings: staticScan.findings.length,
+          evmWarnings: warnings.length,
+          evmScannerErrors: staticScan.scannerErrors.length,
+          pvmWarnings: explainedWarnings.length,
+          pvmBlockingWarnings: explainedWarnings.filter((item) => item.blocking).length,
+          pvmErrors: pvmScan.errors.length
+        }
+      };
+
+      if (pvmScan.errors.length > 0) {
+        partialReasons.push("PARTIAL_PVM_SCANNER_FAILURE");
+      }
     }
 
     const normalizedFindings = staticScan.findings.map((finding) => normalizeFinding(finding));
@@ -472,6 +507,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           warnings,
           scannerErrors: staticScan.scannerErrors,
           partialReasons,
+          pvmScan: pvmScanResult,
           sourceBundle,
           onExtractingContractStructure: async () => {
             await setPipelineStage(analysis.id, "EXTRACTING_CONTRACT_STRUCTURE");

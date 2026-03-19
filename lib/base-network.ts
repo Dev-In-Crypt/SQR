@@ -212,6 +212,10 @@ export function enabledAnalysisChainIds(): number[] {
   return chainIds;
 }
 
+export function isPolkadotHubChainId(chainId: number): boolean {
+  return chainId === config.POLKADOT_HUB_TESTNET_CHAIN_ID || chainId === config.POLKADOT_HUB_MAINNET_CHAIN_ID;
+}
+
 function analysisLabelForChainId(chainId: number): string {
   if (chainId === BASE_MAINNET_CHAIN_ID) {
     return "Base";

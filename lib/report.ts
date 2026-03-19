@@ -1,7 +1,7 @@
 import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
 import { generateAIAuditFindings, generateExecutiveSummary } from "@/lib/llm";
-import type { AIAuditFinding, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
+import type { AIAuditFinding, Finding, PvmScanResult, ReportPayload, Severity, SourceBundle } from "@/lib/types";
 
 const severityRank: Record<Severity, number> = {
   CRITICAL: 5,
@@ -60,6 +60,7 @@ export async function buildReport(params: {
   warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];
+  pvmScan?: PvmScanResult | null;
   sourceBundle: SourceBundle;
   aiAuditFindings?: AIAuditFinding[];
   onExtractingContractStructure?: () => Promise<void>;
@@ -121,17 +122,18 @@ export async function buildReport(params: {
   const reportHash = hashCanonical(hashPayload);
 
   return {
-    report: {
-      executiveSummary: scannerSummary,
-      scannerSummary,
-      findings: sortedFindings,
-      aiAuditFindings,
-      metadata,
-      warnings: params.warnings,
-      scannerErrors: params.scannerErrors,
-      partialReasons: params.partialReasons,
-      reportHash
-    },
+      report: {
+        executiveSummary: scannerSummary,
+        scannerSummary,
+        findings: sortedFindings,
+        aiAuditFindings,
+        metadata,
+        warnings: params.warnings,
+        scannerErrors: params.scannerErrors,
+        partialReasons: params.partialReasons,
+        pvmScan: params.pvmScan ?? null,
+        reportHash
+      },
     topSeverity: topSeverity(sortedFindings)
   };
 }

@@ -4,7 +4,9 @@ export const PARTIAL_REASON_TEXT: Record<PartialReasonCode, string> = {
   PARTIAL_SOLIDITY_INCOMPLETE:
     "Input snippet is incomplete; Slither skipped, heuristic scan used.",
   PARTIAL_SCANNER_FAILURE:
-    "Static scanner failed on required input; heuristic fallback used."
+    "Static scanner failed on required input; heuristic fallback used.",
+  PARTIAL_PVM_SCANNER_FAILURE:
+    "PVM compiler checks did not complete successfully; EVM findings are still available."
 };
 
 const WARNING_TEXT: Record<string, string> = {

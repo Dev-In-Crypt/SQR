@@ -44,6 +44,8 @@ const envSchema = z.object({
   OPENAI_EXEC_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   OPENAI_AUDIT_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
   ENABLE_SLITHER: z.string().default("true"),
+  PVM_COMPILER_BIN: z.string().default("resolc"),
+  PVM_COMPILER_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
   SOLC_PATH: z.string().optional(),
   ENABLE_SOLC_AUTO_RESOLVE: z.string().default("true"),
   SOLC_VERSION_MANAGER: z.string().default(""),
