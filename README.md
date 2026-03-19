@@ -2,15 +2,15 @@
 
 ## What it does
 
-- Analyzes Solidity snippets and verified Base contract source.
+- Analyzes Solidity snippets and verified contract source on supported EVM networks.
 - Combines deterministic static findings with an AI logic review.
 - Returns a structured report with severities, evidence, and remediation direction.
 - Keeps reports private by default with optional sharing/public visibility.
-- Optionally anchors report integrity onchain via a Base receipt.
+- Optionally anchors report integrity onchain via a receipt on supported networks.
 
 ## Goals
 
-- Provide a fast pre-audit checkpoint for Solidity teams and Base builders.
+- Provide a fast pre-audit checkpoint for Solidity teams and EVM builders.
 - Preserve report integrity through stable deterministic hashing.
 - Make review outputs shareable without exposing private data by default.
 - Add optional onchain proof that a specific report existed at a specific time.
@@ -22,7 +22,7 @@
 
 ## Demo materials
 
-- Public product flow: submit snippet or verified Base address, wait for async analysis, inspect report.
+- Public product flow: submit snippet or verified address on a supported network, wait for async analysis, inspect report.
 - Receipt flow: connect wallet on required network, prepare EIP-712 payload, mint, then confirm transaction.
 - Test coverage matrix: `docs/test-matrix.md`
 - Impact metrics snapshot (manual weekly update): `docs/impact.md`
@@ -60,7 +60,7 @@
 ## Working demo
 
 1. Open https://solidity-scan.com
-2. Submit Solidity snippet or verified Base contract address.
+2. Submit Solidity snippet or verified contract address on a supported network.
 3. Review generated findings and metadata.
 4. Optionally mint an onchain receipt from the report page.
 
@@ -80,7 +80,9 @@ npm run deploy:vps:verify
 
 Operational runbook: `docs/operations/systemd-vps.md`
 
-## Base deployment
+## Receipt network deployments
+
+### Base mainnet
 
 - Chain: Base mainnet (`8453`)
 - ReceiptRegistry contract: `0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B`
@@ -91,21 +93,31 @@ Operational runbook: `docs/operations/systemd-vps.md`
   - emitted event: `ReceiptMinted(reportHash, contractAddress, analyzerVersionHash, owner, minter, timestamp, receiptId)`
   - authorization protections: signed EIP-712 payload with `nonce` and `deadline`
 
-## Polkadot Hub deployment
+### Polkadot Hub
 
 - Polkadot Hub Testnet (`420420417`): `https://eth-rpc-testnet.polkadot.io/`
 - Polkadot Hub Mainnet (`420420419`): `https://eth-rpc.polkadot.io/`
 - Explorers:
   - Testnet: `https://blockscout-testnet.polkadot.io`
   - Mainnet: `https://blockscout.polkadot.io`
+- ReceiptRegistry:
+  - Testnet contract: `0x7FC4e0Aa40488588f66eB135C7326068F37cEb80`
+  - Testnet deploy tx: `0x2f6656f1bb998f72a146dd2acbd9e101840fd6cddfcc9e1ac354c28f2b5c3a87`
 - Deploy commands (requires `DEPLOYER_PRIVATE_KEY` in local env):
   - `npm run deploy:receipt:polkadot:testnet`
   - `npm run deploy:receipt:polkadot:mainnet`
+- Runtime toggles for Polkadot Hub receipts:
+  - `FEATURE_POLKADOT_HUB_ENABLED=true`
+  - `FEATURE_RECEIPT_POLKADOT_HUB_ENABLED=true`
+  - `RECEIPT_DEFAULT_CHAIN_ID=420420417`
+  - `POLKADOT_HUB_TESTNET_RECEIPT_CONTRACT_ADDRESS=0x7FC4e0Aa40488588f66eB135C7326068F37cEb80`
+- Deployment evidence: `docs/launch/receiptregistry-deployment-evidence-polkadot-hub-testnet.md`
 
 ## Security model
 
 - Reports are private-by-default and owner-scoped unless explicitly shared/published.
 - Deterministic `reportHash` is derived from scanner-grounded report data.
+- `reportHash` currently excludes AI and `pvmScan` advisory sections to keep hash outputs deterministic across equivalent scanner runs.
 - AI findings are advisory and do not modify deterministic hash output.
 - Receipt minting is signature-gated with EIP-712 typed data.
 - Per-owner nonce enforcement prevents signature replay.
@@ -134,7 +146,7 @@ Analysis runs asynchronously via worker queue mode or inline runtime mode, depen
 
 - Solidity code snippets
 - Verified Solidity contract source
-- Contract addresses on supported Base networks
+- Contract addresses on supported networks
 
 ### Partial support
 
@@ -156,7 +168,7 @@ Analysis runs asynchronously via worker queue mode or inline runtime mode, depen
 - **Scanner engine**: Slither-backed static analysis stage
 - **AI audit stage**: model-based heuristic review
 - **Database**: users, sessions, analyses, reports, findings, receipts
-- **Receipt contract**: onchain report receipt registry on Base
+- **Receipt contract**: onchain report receipt registry on supported networks
 
 ## Environment configuration
 
