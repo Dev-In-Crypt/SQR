@@ -27,6 +27,7 @@
     "test:e2e:headed": "tsx scripts/run-e2e-tests.ts --headed",
     "test:all": "npm run test:unit && npm run test:contract && npm run test:integration && npm run test:e2e",
     "playwright:install": "playwright install --with-deps chromium",
+    "security:gitleaks:staged": "bash scripts/run-gitleaks.sh staged",
     "security:slither": "slither . --config-file slither.config.json --json-types detectors",
     "security:slither:ci": "slither . --config-file slither.config.json --json-types detectors",
     "security:slither:triage": "slither . --config-file slither.config.json --json-types detectors --triage-mode",

@@ -62,6 +62,9 @@
 - Provide must-fix closure record showing open count is zero.
 - Add named approvers for Engineering, Security, and Product/Operations.
 
+Execution checklist:
+- Use `docs/launch/base-launch-closeout-checklist.md` to close the remaining owner actions.
+
 ## Current status
 
 `PRODUCTION STATUS: LIVE AND RESPONDING`
