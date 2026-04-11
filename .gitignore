@@ -97,3 +97,8 @@ prompts/
 # Keep local-only infra/tooling files out of git
 docker-compose.yml
 foundry.toml
+middleware.ts
+tsconfig.json
+vitest.integration.config.ts
+slither.config.json
+slither.db.json
