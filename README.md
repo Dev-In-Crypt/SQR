@@ -76,8 +76,6 @@ Why this fits HashKey Chain: the extension focuses on practical financial-contra
 ## Screenshots
 ![Homepage](docs/assets/hashkey/homepage-hashkey-extension.png)
 
-![Financial Review Report](docs/assets/hashkey/financial-review-report.png)
-
 ![Receipt Proof Confirmation](docs/assets/hashkey/receipt-proof-confirmation.png)
 
 ![Risk Radar](docs/assets/hashkey/risk-radar-views.png)

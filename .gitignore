@@ -61,7 +61,7 @@ docs/negative-test-report.md
 # Slither artifacts
 slither-report.json
 .tmp-slither-check/
-# Note: keep slither.db.json tracked as reviewed security baseline.
+slither.db.json
 
 # OS / IDE
 .DS_Store
@@ -85,3 +85,21 @@ NewPlan.md
 lib/prompts.ts
 lib/prompts.local.ts
 prompts/
+
+# Local-only infra and tooling configs
+docker-compose.yml
+foundry.toml
+middleware.ts
+tsconfig.json
+vitest.integration.config.ts
+slither.config.json
+
+# Local generated/debug artifacts
+backup-pre-polkadot-hub-integration.bundle
+benchmark2-slither.json
+output/benchmark2-combined-report.json
+output/benchmark2-combined-report.md
+tests/e2e/debug-analyze-btn.spec.ts
+tests/e2e/hero-buttons.spec.ts
+tools/
+docs/assets/hashkey/financial-review-report.png

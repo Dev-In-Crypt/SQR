@@ -44,8 +44,6 @@ Screenshots:
 
 ![Homepage - HashKey extension messaging](./assets/hashkey/homepage-hashkey-extension.png)
 
-![Financial Review Mode report](./assets/hashkey/financial-review-report.png)
-
 ![Receipt proof confirmation](./assets/hashkey/receipt-proof-confirmation.png)
 
 ![Risk Radar list and detail](./assets/hashkey/risk-radar-views.png)
