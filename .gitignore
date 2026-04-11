@@ -93,3 +93,7 @@ NewPlan.md
 lib/prompts.ts
 lib/prompts.local.ts
 prompts/
+
+# Keep local-only infra/tooling files out of git
+docker-compose.yml
+foundry.toml
