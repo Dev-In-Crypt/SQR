@@ -79,12 +79,13 @@ function failurePhaseIndex(params: {
 
   const code = (params.errorCode || "").toUpperCase();
 
-  if (
-    code.includes("SOURCE_") ||
-    code.startsWith("BASESCAN") ||
-    code.startsWith("SOURCIFY") ||
-    code === "INVALID_CHAIN" ||
-    code === "INVALID_ADDRESS"
+    if (
+      code.includes("SOURCE_") ||
+      code.startsWith("BASESCAN") ||
+      code.startsWith("BLOCKSCOUT") ||
+      code.startsWith("SOURCIFY") ||
+      code === "INVALID_CHAIN" ||
+      code === "INVALID_ADDRESS"
   ) {
     return 0;
   }

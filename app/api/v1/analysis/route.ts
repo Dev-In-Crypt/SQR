@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
-import { ok, handleRouteError } from "@/lib/api";
+import { ok, handleRouteError, parseJsonBody } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
 import { assertAnalysisQueueReady, enqueueAnalysisJob } from "@/lib/queue";
@@ -21,12 +21,18 @@ const NON_FATAL_SOURCE_ERROR_CODES = new Set([
   "BASESCAN_V1_DEPRECATED",
   "BASESCAN_NOTOK",
   "BASESCAN_HTTP_429",
-  "BASESCAN_HTTP_503"
+  "BASESCAN_HTTP_503",
+  "BLOCKSCOUT_RATE_LIMIT",
+  "BLOCKSCOUT_TIMEOUT",
+  "BLOCKSCOUT_MALFORMED_JSON",
+  "BLOCKSCOUT_NOTOK",
+  "BLOCKSCOUT_HTTP_429",
+  "BLOCKSCOUT_HTTP_503"
 ]);
 
 export async function POST(request: Request) {
   try {
-    const payloadRaw = await request.json();
+    const payloadRaw = await parseJsonBody(request);
     const session = await getSessionContext();
 
     await enforceAnalysisCreateRateLimit({
@@ -43,12 +49,13 @@ export async function POST(request: Request) {
     }
 
     if (payload.inputType === "BASE_ADDRESS" && !session.userId) {
-      throw new ApiError(401, "WALLET_REQUIRED", "Wallet login is required for Base address analysis");
+      throw new ApiError(401, "WALLET_REQUIRED", "Wallet login is required for verified address analysis");
     }
 
     const inputHash = computeInputHash({
       inputType: payload.inputType,
       chainId: payload.chainId,
+      reviewMode: payload.reviewMode,
       code: payload.code,
       address: payload.address
     });
@@ -127,7 +134,10 @@ export async function POST(request: Request) {
         data: {
           analysisId: analysis.id,
           sourceJson: sourceBundle as unknown as Prisma.InputJsonValue,
-          sourceMetaJson: sourceBundle.sourceMeta as Prisma.InputJsonValue,
+          sourceMetaJson: {
+            ...(sourceBundle.sourceMeta as Record<string, unknown>),
+            reviewMode: payload.reviewMode
+          } as Prisma.InputJsonValue,
           lineCount: sourceBundle.lineCount,
           isVerifiedSource: sourceBundle.isVerifiedSource
         }

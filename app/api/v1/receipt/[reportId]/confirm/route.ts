@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, ok, handleRouteError } from "@/lib/api";
+import { fail, ok, handleRouteError, parseJsonBody } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { requiredReceiptChainId } from "@/lib/base-network";
 import { prisma } from "@/lib/db";
@@ -21,7 +21,7 @@ export async function POST(
   context: { params: Promise<{ reportId: string }> }
 ) {
   try {
-    const payload = receiptConfirmSchema.parse(await request.json());
+    const payload = receiptConfirmSchema.parse(await parseJsonBody(request));
     const { reportId } = await context.params;
     const session = await getSessionContext();
 

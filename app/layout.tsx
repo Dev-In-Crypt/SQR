@@ -26,7 +26,8 @@ const monoFont = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Solidity Quick Review",
-  description: "Fast Solidity risk review with deterministic report hash and optional Base receipt",
+  description:
+    "Automated Solidity risk triage for snippets and verified contracts, with Base support and a HashKey Chain hackathon extension for financial contract review.",
   icons: {
     icon: [{ url: "/favicon.ico" }, { url: "/favicon.svg", type: "image/svg+xml" }],
     shortcut: "/favicon.ico"
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <nav className="main-nav">
               <Link href="/#analyze">Analyze</Link>
+              <Link href="/hashkey/radar">Risk Radar</Link>
               <Link href="/#how-it-works">How it works</Link>
               <Link href="/#features">Features</Link>
               <Link href="/#faq">FAQ</Link>

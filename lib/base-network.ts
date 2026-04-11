@@ -1,17 +1,18 @@
 import { ApiError } from "@/lib/errors";
+import {
+  BASE_MAINNET_CHAIN_ID,
+  BASE_SEPOLIA_CHAIN_ID,
+  getChainMetadata,
+  HASHKEY_MAINNET_CHAIN_ID,
+  HASHKEY_TESTNET_CHAIN_ID,
+  type ChainMetadata
+} from "@/lib/chains";
 import { config } from "@/lib/config";
 
-export const BASE_MAINNET_CHAIN_ID = 8453;
-export const BASE_SEPOLIA_CHAIN_ID = 84532;
-
-interface BaseNetworkMetadata {
-  chainId: number;
-  chainHex: `0x${string}`;
-  chainName: string;
-  requiredNetworkName: string;
-  requiredNetworkLabel: string;
-  blockExplorerUrl: string;
-}
+type BaseNetworkMetadata = Pick<
+  ChainMetadata,
+  "chainId" | "chainHex" | "chainName" | "requiredNetworkName" | "requiredNetworkLabel" | "blockExplorerUrl" | "nativeCurrency"
+>;
 
 export interface AddEthereumChainParams {
   chainId: `0x${string}`;
@@ -26,36 +27,23 @@ export interface AddEthereumChainParams {
 }
 
 function metadataForChainId(chainId: number): BaseNetworkMetadata {
-  if (chainId === BASE_MAINNET_CHAIN_ID) {
-    return {
-      chainId,
-      chainHex: "0x2105",
-      chainName: "Base",
-      requiredNetworkName: "Base",
-      requiredNetworkLabel: "Base Mainnet",
-      blockExplorerUrl: "https://basescan.org"
-    };
+  const metadata = getChainMetadata(chainId);
+  if (!metadata) {
+    throw new ApiError(500, "UNSUPPORTED_RECEIPT_CHAIN", `Unsupported receipt chainId ${chainId}.`);
   }
 
-  if (chainId === BASE_SEPOLIA_CHAIN_ID) {
-    return {
-      chainId,
-      chainHex: "0x14a34",
-      chainName: "Base Sepolia",
-      requiredNetworkName: "Base Sepolia",
-      requiredNetworkLabel: "Base Sepolia",
-      blockExplorerUrl: "https://sepolia.basescan.org"
-    };
-  }
-
-  throw new ApiError(
-    500,
-    "UNSUPPORTED_RECEIPT_CHAIN",
-    `Unsupported receipt chainId ${chainId}. Only Base mainnet (8453) and Base Sepolia (84532) are supported.`
-  );
+  return metadata;
 }
 
 function rpcUrlForChainId(chainId: number): string | null {
+  if (chainId === HASHKEY_TESTNET_CHAIN_ID) {
+    return config.HASHKEY_TESTNET_RPC_URL || null;
+  }
+
+  if (chainId === HASHKEY_MAINNET_CHAIN_ID) {
+    return config.HASHKEY_MAINNET_RPC_URL || null;
+  }
+
   if (chainId === BASE_MAINNET_CHAIN_ID) {
     return config.BASE_MAINNET_RPC_URL || config.BASE_RPC_URL || null;
   }
@@ -68,6 +56,14 @@ function rpcUrlForChainId(chainId: number): string | null {
 }
 
 export function requiredReceiptChainId(): number {
+  if (config.RECEIPT_CHAIN_ID) {
+    return config.RECEIPT_CHAIN_ID;
+  }
+
+  if (getChainMetadata(config.DEFAULT_ANALYSIS_CHAIN_ID)) {
+    return config.DEFAULT_ANALYSIS_CHAIN_ID;
+  }
+
   if (config.APP_ENV === "staging") {
     return BASE_SEPOLIA_CHAIN_ID;
   }
@@ -76,7 +72,7 @@ export function requiredReceiptChainId(): number {
     return BASE_MAINNET_CHAIN_ID;
   }
 
-  return config.BASE_CHAIN_ID;
+  return HASHKEY_TESTNET_CHAIN_ID;
 }
 
 export function requiredReceiptRpcUrl(): string {
@@ -115,11 +111,7 @@ export function addEthereumChainParamsForChain(chainId: number, rpcUrl: string):
   return {
     chainId: metadata.chainHex,
     chainName: metadata.chainName,
-    nativeCurrency: {
-      name: "Ether",
-      symbol: "ETH",
-      decimals: 18
-    },
+    nativeCurrency: metadata.nativeCurrency,
     rpcUrls: [rpcUrl],
     blockExplorerUrls: [metadata.blockExplorerUrl]
   };

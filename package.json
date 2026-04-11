@@ -32,6 +32,9 @@
     "security:slither:ci": "slither . --config-file slither.config.json --json-types detectors",
     "security:slither:triage": "slither . --config-file slither.config.json --json-types detectors --triage-mode",
     "check:db": "tsx scripts/check-db.ts",
+    "hashkey:faucet:claim": "tsx scripts/hashkey/claim-faucet.ts",
+    "hashkey:receipt:deploy": "tsx scripts/hashkey/deploy-receipt.ts",
+    "hashkey:demo": "tsx scripts/hashkey/demo-flow.ts",
     "test:unit:cov": "vitest run --config vitest.config.ts --coverage",
     "deploy:vps": "bash scripts/deploy-vps-safe.sh",
     "deploy:vps:verify": "bash scripts/verify-vps-runtime.sh"

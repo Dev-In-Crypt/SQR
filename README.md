@@ -1,166 +1,83 @@
 # Solidity Quick Review
 
-## What it does
+## Short product summary
+Solidity Quick Review is an automated Solidity risk-triage product for snippet and verified-contract analysis. It helps teams run fast screening, review structured findings, and decide what needs deeper manual audit. The product is not a formal audit platform and does not provide security certification.
 
-- Analyzes Solidity snippets and verified Base contract source.
-- Combines deterministic static findings with an AI logic review.
-- Returns a structured report with severities, evidence, and remediation direction.
-- Keeps reports private by default with optional sharing/public visibility.
-- Optionally anchors report integrity onchain via a Base receipt.
+For the HashKey Chain hackathon, we added a focused financial-contract review extension on top of the existing product while keeping Base support.
 
-## Goals
+## Core use cases
+- Solidity snippet review
+- Verified contract review by address
+- Structured findings with severity, evidence, and remediation direction
+- Optional onchain proof/receipt flow for report artifact existence
 
-- Provide a fast pre-audit checkpoint for Solidity teams and Base builders.
-- Preserve report integrity through stable deterministic hashing.
-- Make review outputs shareable without exposing private data by default.
-- Add optional onchain proof that a specific report existed at a specific time.
+## Supported networks
+| Network | Status | Notes |
+|---|---|---|
+| Base Mainnet (8453) | Supported | Original product foundation |
+| Base Sepolia (84532) | Supported | Staging/testing path |
+| HashKey Testnet (133) | Supported (hackathon extension) | Featured financial-review demo workflow |
+| HashKey Mainnet (177) | Partial | Receipt contract deployed and verified; UI default flow is still testnet-first |
 
-## Live demo
+Receipt status by network:
+- HashKey testnet: active demo receipt flow
+- HashKey mainnet: contract deployed and verified (`0x02d42a47cd33f3feefc7cf31b8e29657ed825ab8`)
+- Base: support remains part of product architecture and story
 
-- App: https://solidity-scan.com
-- Health endpoint: https://solidity-scan.com/api/v1/health
+## HashKey Chain hackathon extension
+This extension adds a HashKey-focused financial risk-review workflow to Solidity Quick Review. It includes DeFi/PayFi-oriented report framing, audience-specific report views, and a lightweight ecosystem Risk Radar page.
 
-## Demo materials
+Why this fits HashKey Chain: the extension focuses on practical financial-contract triage and integration-readiness signaling, instead of generic chain expansion.
 
-- Public product flow: submit snippet or verified Base address, wait for async analysis, inspect report.
-- Receipt flow: connect wallet on required network, prepare EIP-712 payload, mint, then confirm transaction.
-- Test coverage matrix: `docs/test-matrix.md`
-- Impact metrics snapshot (manual weekly update): `docs/impact.md`
+## Key features
+- Snippet and verified-address analysis
+- DeFi / PayFi Review Mode (financial risk framing)
+- Builder Report and Partner / Investor Report views
+- Deterministic report hashing
+- Optional receipt anchoring flow
+- HashKey Ecosystem Risk Radar (curated entries)
 
-## Quickstart local
+## Demo flow
+1. Open `https://solidity-scan.com`
+2. Select `HashKey Testnet (133)`
+3. Select `DeFi / PayFi Review Mode`
+4. Analyze a verified contract address
+5. Review financial sections and integration-readiness summary
+6. Switch Builder / Partner report views
+7. Mint receipt proof
+8. Open Risk Radar detail entry
 
-### Option A: Docker for data services (recommended)
+## Architecture overview
+- Web app (Next.js): input, report, history, receipt UX
+- API layer: analysis lifecycle, auth/ACL, report/receipt endpoints
+- Analysis pipeline: source ingestion, static analysis, structure extraction, AI-assisted layer, report assembly
+- Worker/queue execution for async analysis
+- Receipt contract for onchain proof of report artifact existence
 
-1. Copy env template: `cp .env.example .env`
-2. Start Postgres and Redis: `docker compose up -d postgres redis`
-3. Install dependencies: `npm ci`
-4. Generate Prisma client and apply schema: `npx prisma generate && npx prisma db push`
-5. Start web app: `npm run dev`
-6. Start worker in second terminal: `npm run worker`
-7. Check health: `curl http://localhost:3000/api/v1/health`
+## Testing / validation
+- `npm run build`
+- `npm run typecheck`
+- Integration tests: `tests/integration/hashkey-financial-mode.integration.test.ts`
+- Unit tests: `tests/unit/report-financial-readiness.test.ts`
+- Runtime verification scripts for deployment health (`npm run deploy:vps:verify`)
 
-### Option B: Manual dependencies
+## Current limitations
+- Not a replacement for manual smart contract audit
+- No security guarantees or certification claims
+- Risk Radar is curated MVP scope, not full ecosystem indexing
+- HashKey mainnet analysis UX is not the default public demo path yet (UI selector remains Base Mainnet + HashKey Testnet)
+- Some advanced multi-contract protocol flows still require manual interpretation of findings
 
-- PostgreSQL 16+
-- Redis 7+
-- Slither (`slither-analyzer`)
-- `solc` 0.8.24 (matches `foundry.toml`)
-- Foundry (`forge`) for contract tests
+## Additional docs
+- HashKey hackathon explainer: `docs/hashkey-hackathon.md`
+- HashKey integration parameters: `docs/hashkey-integration-params.md`
+- Demo script: `docs/hashkey-demo-flow.md`
 
-## Installation steps
+## Screenshots
+![Homepage](docs/assets/hashkey/homepage-hashkey-extension.png)
 
-1. Install Node.js 20+.
-2. Install project dependencies: `npm ci`.
-3. Configure environment from `.env.example` (do not commit secrets).
-4. Ensure database and Redis are reachable.
-5. Install scanner toolchain (`slither`, `solc 0.8.24`, optional Foundry for contract tests).
-6. Initialize database: `npx prisma generate && npx prisma db push`.
-7. Run app and worker (`npm run dev` and `npm run worker`).
+![Financial Review Report](docs/assets/hashkey/financial-review-report.png)
 
-## Working demo
+![Receipt Proof Confirmation](docs/assets/hashkey/receipt-proof-confirmation.png)
 
-1. Open https://solidity-scan.com
-2. Submit Solidity snippet or verified Base contract address.
-3. Review generated findings and metadata.
-4. Optionally mint an onchain receipt from the report page.
-
-## Production deployment
-
-Production runtime uses a VPS with two `systemd` services:
-
-- `sqr-web.service`
-- `sqr-worker.service`
-
-Safe deploy flow:
-
-```bash
-npm run deploy:vps
-npm run deploy:vps:verify
-```
-
-Operational runbook: `docs/operations/systemd-vps.md`
-
-## Base deployment
-
-- Chain: Base mainnet (`8453`)
-- ReceiptRegistry contract: `0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B`
-- Verification link: https://basescan.org/address/0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B#code
-- Onchain write model:
-  - primary key: `reportHash`
-  - stored metadata: `receiptId`, `owner`, `contractAddress`, `analyzerVersionHash`, `timestamp`
-  - emitted event: `ReceiptMinted(reportHash, contractAddress, analyzerVersionHash, owner, minter, timestamp, receiptId)`
-  - authorization protections: signed EIP-712 payload with `nonce` and `deadline`
-
-## Security model
-
-- Reports are private-by-default and owner-scoped unless explicitly shared/published.
-- Deterministic `reportHash` is derived from scanner-grounded report data.
-- AI findings are advisory and do not modify deterministic hash output.
-- Receipt minting is signature-gated with EIP-712 typed data.
-- Per-owner nonce enforcement prevents signature replay.
-- Deadline enforcement limits signature lifetime.
-- Receipt network is explicitly chain-gated by environment.
-- Slither security gate blocks CI on `MEDIUM` and `HIGH` severities.
-- The platform is an automated review layer, not a replacement for manual audits.
-
-See: `SecurityChecks.md`
-
-## Analysis pipeline
-
-1. Source ingestion (snippet or verified contract source by address)
-2. Source normalization and validation
-3. Static analysis scanner stage (Slither + Foundry build checks when available, with fallback behavior)
-4. Structured contract context extraction
-5. AI audit stage
-6. Report assembly and persistence
-
-Analysis runs asynchronously via worker queue mode or inline runtime mode, depending on deployment configuration.
-
-## Supported inputs
-
-### Supported
-
-- Solidity code snippets
-- Verified Solidity contract source
-- Contract addresses on supported Base networks
-
-### Partial support
-
-- Multi-contract source bundles
-- Contracts with simple inheritance graphs
-
-### Not fully supported yet
-
-- Upgradeable proxy systems
-- Delegatecall-heavy architectures
-- Large multi-file protocol repositories
-- Assembly-heavy contracts
-
-## System architecture
-
-- **Web application**: submission UI, report UI, visibility controls, receipt flow, history
-- **API service**: analysis lifecycle, access control, history, receipt endpoints
-- **Analysis worker**: asynchronous pipeline execution
-- **Scanner engine**: Slither-backed static analysis stage
-- **AI audit stage**: model-based heuristic review
-- **Database**: users, sessions, analyses, reports, findings, receipts
-- **Receipt contract**: onchain report receipt registry on Base
-
-## Environment configuration
-
-Use `.env.example` as the baseline for local/staging/production configuration.
-
-## Repository structure
-
-```text
-app/        Next.js app routes and API endpoints
-lib/        analysis pipeline, scanner, AI, queue, auth, receipt logic
-contracts/  receipt contract and contract tests
-scripts/    worker and operational scripts
-tests/      unit, integration, and e2e suites
-docs/       project documentation
-```
-
-## License
-
-This project is licensed under the MIT License. See `LICENSE`.
+![Risk Radar](docs/assets/hashkey/risk-radar-views.png)

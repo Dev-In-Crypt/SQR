@@ -2,10 +2,10 @@ import { isAddress } from "viem";
 
 import { ApiError } from "@/lib/errors";
 import { hashCanonical } from "@/lib/hash";
-import { config } from "@/lib/config";
+import { getChainMetadata, listSupportedAddressChains } from "@/lib/chains";
 import { extractSolidityPragmaFromFiles, extractSolidityPragmaFromSource } from "@/lib/solidity-pragma";
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
-import type { InputType, SourceBundle, SourceFile } from "@/lib/types";
+import type { InputType, ReviewMode, SourceBundle, SourceFile } from "@/lib/types";
 import { fetchVerifiedSource } from "@/lib/source/fetch-verified";
 
 const CONTROL_CHARS_REGEX = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
@@ -155,25 +155,26 @@ export function computeInputHash(params: {
   chainId: number;
   code?: string;
   address?: string;
+  reviewMode?: ReviewMode;
 }): string {
   const normalized = params.code ? sanitizeCodeRaw(params.code).normalized : null;
 
   return hashCanonical({
     inputType: params.inputType,
     chainId: params.chainId,
+    reviewMode: params.reviewMode ?? "STANDARD",
     code: normalized,
     address: params.address ? params.address.toLowerCase() : null
   });
 }
 
 export function enforceAddressChain(chainId: number): void {
-  const allowed = [config.BASE_CHAIN_ID, config.STAGING_BASE_CHAIN_ID];
-  if (!allowed.includes(chainId)) {
-    throw new ApiError(400, "INVALID_CHAIN", "Only Base mainnet or Base Sepolia are supported");
-  }
-
-  if (config.APP_ENV === "production" && chainId !== config.BASE_CHAIN_ID) {
-    throw new ApiError(400, "INVALID_CHAIN", "Production only accepts Base mainnet chainId 8453");
+  const chain = getChainMetadata(chainId);
+  if (!chain) {
+    const supported = listSupportedAddressChains()
+      .map((item) => `${item.requiredNetworkLabel} (${item.chainId})`)
+      .join(", ");
+    throw new ApiError(400, "INVALID_CHAIN", `Unsupported chainId. Supported networks: ${supported}`);
   }
 }
 

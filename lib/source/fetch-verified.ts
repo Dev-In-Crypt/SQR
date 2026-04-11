@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { SourceFile } from "@/lib/types";
+import { getChainMetadata } from "@/lib/chains";
 import { config } from "@/lib/config";
 
 interface BaseScanResultItem {
@@ -120,6 +121,23 @@ function classifyBaseScanReason(reason: string): string {
   return "BASESCAN_NOTOK";
 }
 
+function classifyBlockscoutReason(reason: string): string {
+  const normalized = reason.toLowerCase();
+
+  if (
+    normalized.includes("contract source code not verified") ||
+    normalized.includes("unable to locate contractcode")
+  ) {
+    return "SOURCE_UNVERIFIED";
+  }
+
+  if (normalized.includes("rate limit") || normalized.includes("too many requests")) {
+    return "BLOCKSCOUT_RATE_LIMIT";
+  }
+
+  return "BLOCKSCOUT_NOTOK";
+}
+
 function shouldRetryBaseScan(reason: string | undefined): boolean {
   if (!reason) {
     return false;
@@ -131,6 +149,20 @@ function shouldRetryBaseScan(reason: string | undefined): boolean {
     reason === "BASESCAN_MALFORMED_JSON" ||
     reason === "BASESCAN_HTTP_429" ||
     reason === "BASESCAN_HTTP_503"
+  );
+}
+
+function shouldRetryBlockscout(reason: string | undefined): boolean {
+  if (!reason) {
+    return false;
+  }
+
+  return (
+    reason === "BLOCKSCOUT_RATE_LIMIT" ||
+    reason === "BLOCKSCOUT_TIMEOUT" ||
+    reason === "BLOCKSCOUT_MALFORMED_JSON" ||
+    reason === "BLOCKSCOUT_HTTP_429" ||
+    reason === "BLOCKSCOUT_HTTP_503"
   );
 }
 
@@ -195,14 +227,28 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
     return mockBaseScanResponse(chainId, address);
   }
 
-  const url = new URL(resolveBaseScanApiUrl(config.BASESCAN_API_URL));
+  const chain = getChainMetadata(chainId);
+  if (!chain) {
+    return {
+      verified: false,
+      files: [],
+      metadata: {},
+      reason: "INVALID_CHAIN"
+    };
+  }
+
+  const url = new URL(
+    chain.sourceApiKind === "ETHERSCAN_V2" ? resolveBaseScanApiUrl(chain.sourceApiUrl) : chain.sourceApiUrl
+  );
   url.searchParams.set("module", "contract");
   url.searchParams.set("action", "getsourcecode");
   url.searchParams.set("address", address);
-  url.searchParams.set("chainid", String(chainId));
+  if (chain.sourceApiKind === "ETHERSCAN_V2") {
+    url.searchParams.set("chainid", String(chainId));
+  }
 
-  if (config.BASESCAN_API_KEY) {
-    url.searchParams.set("apikey", config.BASESCAN_API_KEY);
+  if (chain.sourceApiKey) {
+    url.searchParams.set("apikey", chain.sourceApiKey);
   }
 
   let response: Response;
@@ -218,8 +264,8 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
       return {
         verified: false,
         files: [],
-        metadata: { sourceProvider: "basescan-v2", url: url.toString() },
-        reason: "BASESCAN_TIMEOUT"
+        metadata: { sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout", url: url.toString() },
+        reason: chain.sourceApiKind === "ETHERSCAN_V2" ? "BASESCAN_TIMEOUT" : "BLOCKSCOUT_TIMEOUT"
       };
     }
 
@@ -231,10 +277,10 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
       verified: false,
       files: [],
       metadata: {
-        sourceProvider: "basescan-v2",
+        sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout",
         url: url.toString()
       },
-      reason: `BASESCAN_HTTP_${response.status}`
+      reason: `${chain.sourceApiKind === "ETHERSCAN_V2" ? "BASESCAN" : "BLOCKSCOUT"}_HTTP_${response.status}`
     };
   }
 
@@ -246,12 +292,12 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
     return {
       verified: false,
       files: [],
-      metadata: {
-        sourceProvider: "basescan-v2",
-        url: url.toString()
-      },
-      reason: "BASESCAN_MALFORMED_JSON"
-    };
+        metadata: {
+          sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout",
+          url: url.toString()
+        },
+        reason: chain.sourceApiKind === "ETHERSCAN_V2" ? "BASESCAN_MALFORMED_JSON" : "BLOCKSCOUT_MALFORMED_JSON"
+      };
   }
 
   if (payload.status !== "1" || !Array.isArray(payload.result)) {
@@ -264,12 +310,12 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
       verified: false,
       files: [],
       metadata: {
-        sourceProvider: "basescan-v2",
+        sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout",
         status: payload.status,
         message: payload.message,
         reasonMessage
       },
-      reason: classifyBaseScanReason(reasonMessage)
+      reason: chain.sourceApiKind === "ETHERSCAN_V2" ? classifyBaseScanReason(reasonMessage) : classifyBlockscoutReason(reasonMessage)
     };
   }
 
@@ -279,7 +325,7 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
       verified: false,
       files: [],
       metadata: {
-        sourceProvider: "basescan-v2"
+        sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout"
       },
       reason: "SOURCE_UNVERIFIED"
     };
@@ -291,7 +337,7 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
     verified: files.length > 0,
     files,
     metadata: {
-      sourceProvider: "basescan-v2",
+      sourceProvider: chain.sourceApiKind === "ETHERSCAN_V2" ? "basescan-v2" : "blockscout",
       contractName: item.ContractName,
       compilerVersion: item.CompilerVersion,
       optimizationUsed: item.OptimizationUsed,
@@ -304,6 +350,16 @@ async function fetchFromBaseScanOnce(chainId: number, address: string, timeoutMs
 }
 
 async function fetchFromBaseScan(chainId: number, address: string): Promise<VerifiedSourceResponse> {
+  const chain = getChainMetadata(chainId);
+  if (!chain) {
+    return {
+      verified: false,
+      files: [],
+      metadata: {},
+      reason: "INVALID_CHAIN"
+    };
+  }
+
   const startedAt = Date.now();
   let attempt = 0;
   let last: VerifiedSourceResponse = {
@@ -318,7 +374,8 @@ async function fetchFromBaseScan(chainId: number, address: string): Promise<Veri
     const remaining = BASESCAN_TOTAL_TIMEOUT_MS - (Date.now() - startedAt);
     last = await fetchFromBaseScanOnce(chainId, address, remaining);
 
-    if (last.verified || !shouldRetryBaseScan(last.reason)) {
+    const shouldRetry = chain.sourceApiKind === "ETHERSCAN_V2" ? shouldRetryBaseScan(last.reason) : shouldRetryBlockscout(last.reason);
+    if (last.verified || !shouldRetry) {
       return {
         ...last,
         metadata: {

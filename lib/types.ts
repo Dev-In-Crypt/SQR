@@ -18,6 +18,7 @@ export type PipelineStage =
 export type PartialReasonCode = "PARTIAL_SOLIDITY_INCOMPLETE" | "PARTIAL_SCANNER_FAILURE";
 
 export type InputType = "PASTE_CODE" | "BASE_ADDRESS";
+export type ReviewMode = "STANDARD" | "DEFI_PAYFI";
 export type Visibility = "PRIVATE" | "PUBLIC";
 
 export interface Evidence {
@@ -53,9 +54,51 @@ export interface ReportMetadata {
   rulesetVersion: string;
   generatedAt: string;
   inputType: InputType;
+  reviewMode: ReviewMode;
   chainId: number;
   contractAddress?: string;
   sourceHash?: string;
+}
+
+export interface FinancialReviewSection {
+  category:
+    | "PRIVILEGE_RISK"
+    | "ADMIN_PAUSE_RISK"
+    | "UPGRADEABILITY_RISK"
+    | "ORACLE_DEPENDENCY_RISK"
+    | "FUND_FLOW_HOTSPOTS"
+    | "WITHDRAWAL_ACCOUNTING_SETTLEMENT_RISK"
+    | "INTEGRATION_RISK_SUMMARY";
+  label: string;
+  riskLevel: Severity;
+  summary: string;
+  evidence: string[];
+  observedControls?: string[];
+}
+
+export interface IntegrationReadiness {
+  status: "GREEN" | "AMBER" | "RED";
+  confidenceScore: number;
+  rationale: string[];
+}
+
+export interface AudienceReportView {
+  title: string;
+  overview: string;
+  highlights: string[];
+  nextActions: string[];
+  confidenceBoundary: string;
+}
+
+export interface FinancialReviewPayload {
+  mode: "DEFI_PAYFI";
+  sections: FinancialReviewSection[];
+  recurringPatterns: string[];
+  manualReviewPriorities: string[];
+  observedControls: string[];
+  integrationReadiness: IntegrationReadiness;
+  builderReport: AudienceReportView;
+  partnerReport: AudienceReportView;
 }
 
 export interface ReportPayload {
@@ -64,6 +107,7 @@ export interface ReportPayload {
   findings: Finding[];
   aiAuditFindings: AIAuditFinding[];
   metadata: ReportMetadata;
+  financialReview?: FinancialReviewPayload;
   warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];

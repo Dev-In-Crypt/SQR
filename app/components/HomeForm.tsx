@@ -7,22 +7,44 @@ import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
 import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
 
 type InputTab = "PASTE_CODE" | "BASE_ADDRESS";
+type ReviewMode = "STANDARD" | "DEFI_PAYFI";
 
 interface SessionResponse {
   walletAddress: string | null;
+}
+
+interface RuntimeConfigResponse {
+  analysis: {
+    defaultChainId: number;
+    supportedChains: Array<{
+      chainId: number;
+      chainHex: `0x${string}`;
+      label: string;
+      chainName: string;
+      nativeCurrency: {
+        name: string;
+        symbol: string;
+        decimals: number;
+      };
+      explorerBaseUrl: string;
+    }>;
+    reviewModes: Array<{ value: ReviewMode; label: string }>;
+  };
 }
 
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
 export default function HomeForm() {
-  const chainId = 8453;
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
+  const [reviewMode, setReviewMode] = useState<ReviewMode>("DEFI_PAYFI");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [supportedChains, setSupportedChains] = useState<RuntimeConfigResponse["analysis"]["supportedChains"]>([]);
+  const [selectedChainId, setSelectedChainId] = useState<number>(133);
   const [codeInteracted, setCodeInteracted] = useState(false);
   const [addressInteracted, setAddressInteracted] = useState(false);
   const [showSnippetWarning, setShowSnippetWarning] = useState(false);
@@ -36,6 +58,7 @@ export default function HomeForm() {
   const addressInvalid = trimmedAddress.length > 0 && !isAddress(trimmedAddress);
   const ctaIdleLabel = tab === "PASTE_CODE" ? "Analyze code" : "Analyze contract";
   const ctaBusyLabel = tab === "PASTE_CODE" ? "Analyzing code..." : "Analyzing contract...";
+  const selectedChain = supportedChains.find((item) => item.chainId === selectedChainId) || null;
 
   async function refreshSession() {
     const response = await fetch("/api/v1/session", { cache: "no-store" });
@@ -50,6 +73,22 @@ export default function HomeForm() {
 
   useEffect(() => {
     void refreshSession();
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/config", { cache: "no-store" });
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as RuntimeConfigResponse;
+        const networks = payload.analysis.supportedChains || [];
+        setSupportedChains(networks);
+        setSelectedChainId(payload.analysis.defaultChainId || networks[0]?.chainId || 133);
+      } catch {
+        // Ignore config fetch failure and keep defaults.
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -134,12 +173,14 @@ export default function HomeForm() {
           ? {
               inputType: "PASTE_CODE",
               code,
-              chainId
+              chainId: selectedChainId,
+              reviewMode
             }
           : {
               inputType: "BASE_ADDRESS",
               address: trimmedAddress,
-              chainId
+              chainId: selectedChainId,
+              reviewMode
             };
 
       const response = await fetch("/api/v1/analysis", {
@@ -198,8 +239,55 @@ export default function HomeForm() {
             setShowSnippetWarning(false);
           }}
         >
-          Contract address
+          Verified address
         </button>
+      </div>
+
+      <div className="stack home-input-group">
+        <label className="stack">
+          <span>Network</span>
+          <select
+            className="input"
+            value={selectedChainId}
+            onChange={(event) => {
+              setSelectedChainId(Number(event.target.value));
+              setError(null);
+            }}
+          >
+            {(supportedChains.length > 0
+              ? supportedChains
+              : [
+                  {
+                    chainId: 133,
+                    chainHex: "0x85" as const,
+                    label: "HashKey Testnet",
+                    chainName: "HashKey Chain Testnet",
+                    nativeCurrency: { name: "HashKey", symbol: "HSK", decimals: 18 },
+                    explorerBaseUrl: "https://testnet-explorer.hsk.xyz"
+                  }
+                ]
+            ).map((chain) => (
+              <option key={chain.chainId} value={chain.chainId}>
+                {chain.label} (chainId {chain.chainId})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="stack">
+          <span>Review mode</span>
+          <select
+            className="input"
+            value={reviewMode}
+            onChange={(event) => {
+              setReviewMode(event.target.value as ReviewMode);
+              setError(null);
+            }}
+          >
+            <option value="DEFI_PAYFI">DeFi / PayFi Review Mode</option>
+            <option value="STANDARD">Standard Review Mode</option>
+          </select>
+        </label>
       </div>
 
       <div className="stack home-tab-panel">
@@ -231,7 +319,7 @@ export default function HomeForm() {
               </span>
             </div>
             <label className="stack">
-              <span>Base contract address</span>
+              <span>{selectedChain ? `${selectedChain.chainName} contract address` : "Contract address"}</span>
               <input
                 className="input home-address-input"
                 value={address}
@@ -245,6 +333,11 @@ export default function HomeForm() {
               />
             </label>
             {showAddressWarning ? <span className="error">{INVALID_ADDRESS_WARNING}</span> : null}
+            {selectedChain ? (
+              <span className="muted">
+                Verified source will be fetched from {selectedChain.label} explorer before analysis.
+              </span>
+            ) : null}
           </div>
         )}
       </div>

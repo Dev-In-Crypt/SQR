@@ -12,6 +12,7 @@ import type {
   AnalysisStatus,
   Finding,
   PipelineStage,
+  ReviewMode,
   ScannerOutput,
   SnippetCompleteness,
   SourceBundle
@@ -77,6 +78,9 @@ function hasScannerInfraDiagnostic(diagnostics: string[]): boolean {
       normalized.includes("solc_select_unavailable") ||
       normalized.includes("solc_path does not exist") ||
       normalized.includes("solc_fallback_path does not exist") ||
+      normalized.includes("json.decoder.jsondecodeerror") ||
+      normalized.includes("expecting value: line 1 column 1") ||
+      normalized.includes("crytic_compile/platform/solc.py") ||
       normalized.includes("http request failed") ||
       normalized.includes("fetch failed") ||
       normalized.includes("network") ||
@@ -410,6 +414,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
     const startedAt = Date.now();
     const sourceBundle = asSourceBundle(analysis.sourceBundle.sourceJson);
     const sourceMeta = (analysis.sourceBundle.sourceMetaJson ?? {}) as Record<string, unknown>;
+    const reviewMode = sourceMeta.reviewMode === "DEFI_PAYFI" ? "DEFI_PAYFI" : "STANDARD";
     const snippetCompleteness = readSnippetCompleteness(sourceMeta.snippetCompleteness);
     const pasteWarnings = Array.isArray(sourceMeta.pasteWarnings)
       ? sourceMeta.pasteWarnings.filter((item): item is string => typeof item === "string")
@@ -473,6 +478,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           scannerErrors: staticScan.scannerErrors,
           partialReasons,
           sourceBundle,
+          reviewMode: reviewMode as ReviewMode,
           onExtractingContractStructure: async () => {
             await setPipelineStage(analysis.id, "EXTRACTING_CONTRACT_STRUCTURE");
           },

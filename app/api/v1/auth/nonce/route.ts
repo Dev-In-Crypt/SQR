@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, ok, handleRouteError } from "@/lib/api";
+import { fail, ok, handleRouteError, parseJsonBody } from "@/lib/api";
 import { buildSignMessage, generateNonce, isValidWallet, normalizeWallet } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { walletSchema } from "@/lib/validation";
@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const payload = walletSchema.parse(await request.json());
+    const payload = walletSchema.parse(await parseJsonBody(request));
 
     if (!isValidWallet(payload.wallet)) {
       return fail(400, "INVALID_WALLET", "Invalid wallet address");

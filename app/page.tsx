@@ -11,11 +11,12 @@ export default function HomePage() {
                 <div className="stack hero-copy">
                   <h1>Solidity Quick Review</h1>
                   <p className="hero-subheadline">
-                    Check Solidity snippets and verified Base contracts in minutes with AI-assisted static analysis and
-                    structured findings you can share when needed.
+                    Fast Solidity risk triage for snippets and verified contracts, with Base support and a focused
+                    HashKey Chain hackathon extension for financial contract review.
                   </p>
                   <p className="hero-subheadline hero-subheadline-secondary">
-                    Surface potential vulnerabilities and logic issues early, before they reach production.
+                    Use this for screening, structured review handoff, and trust signaling. It is not a full audit and
+                    does not provide security certification.
                   </p>
                 </div>
                 <div className="hero-analyzer">
@@ -35,38 +36,32 @@ export default function HomePage() {
               <ol className="steps polished-steps">
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">Submit Solidity snippets or verified Base contract addresses.</strong>{" "}
-                    The system retrieves the source code for analysis.
+                    <strong className="how-step-lead">Choose snippet or verified-address input and select a supported network.</strong>{" "}
+                    Solidity Quick Review supports Base and HashKey workflows.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      We run multiple static analysis tools to detect vulnerabilities and risky coding patterns before
-                      deployment.
-                    </strong>
+                    <strong className="how-step-lead">Run static analysis and structured AI-assisted review.</strong> The
+                    pipeline prioritizes practical risk triage and clear remediation direction.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      AI logic review checks contract behavior and highlights suspicious flows.
-                    </strong>{" "}
-                    An AI powered review analyzes contract logic and flags unusual or potentially dangerous behavior.
+                    <strong className="how-step-lead">Use DeFi / PayFi Review Mode for HashKey financial contract screening.</strong>{" "}
+                    Output emphasizes privilege, upgradeability, oracle dependency, fund flow, and settlement risk.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      You receive a structured report with severities, evidence, and guidance.
-                    </strong>{" "}
-                    The results are returned as a structured report with severity levels and clear explanations.
+                    <strong className="how-step-lead">Review Builder and Partner views from the same core report.</strong>{" "}
+                    Technical and executive audiences see consistent conclusions with different depth.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">Optionally mint an onchain receipt so you can prove what was reviewed.</strong>{" "}
-                    You can optionally mint an onchain receipt to record what code was analyzed and when.
+                    <strong className="how-step-lead">Optionally mint an onchain receipt to anchor proof of review.</strong>{" "}
+                    The receipt proves report artifact existence, not contract safety.
                   </span>
                 </li>
               </ol>
@@ -89,10 +84,10 @@ export default function HomePage() {
                   </p>
                 </article>
                 <article className="info-block stack">
-                  <h3>Base builders and teams</h3>
+                  <h3>Base and HashKey teams</h3>
                   <p className="muted">
-                    Review verified Base contracts before deeper manual audits, integrations, or launches, and keep a
-                    record of what was checked.
+                    Run verified-contract checks before deeper manual audits, integrations, or launches, then keep a
+                    clear record of what was reviewed.
                   </p>
                 </article>
                 <article className="info-block stack">
@@ -124,7 +119,7 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>Who is this for?</summary>
                   <p className="muted">
-                    Solidity developers, Base builders, product teams, and users who need a fast review checkpoint.
+                    Solidity teams, Base builders, HashKey builders, and integration partners who need fast risk triage.
                     It fits early validation before deployment, integration, or deeper manual review.
                   </p>
                 </details>
@@ -159,7 +154,8 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>What is an onchain receipt?</summary>
                   <p className="muted">
-                    It is an optional Base transaction that timestamps a signed report hash.
+                    It is an optional onchain transaction (Base-compatible / HashKey demo flow) that timestamps a
+                    signed report hash.
                     This provides onchain proof that a specific report output existed at that time.
                   </p>
                 </details>
@@ -173,8 +169,16 @@ export default function HomePage() {
                 <details className="faq-item">
                   <summary>What can I analyze?</summary>
                   <p className="muted">
-                    You can paste Solidity snippets or submit verified Base contract addresses.
+                    You can paste Solidity snippets or submit verified contract addresses on supported networks,
+                    including Base and HashKey Chain.
                     The platform is designed for practical automated review on these input types.
+                  </p>
+                </details>
+                <details className="faq-item">
+                  <summary>Is HashKey a separate product?</summary>
+                  <p className="muted">
+                    No. Solidity Quick Review is the core product. HashKey Chain Financial Contract Risk Review is a
+                    focused hackathon extension built on top of it.
                   </p>
                 </details>
               </div>
@@ -195,9 +199,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title roadmap-title-nowrap">Deeper static analysis coverage</h3>
+                    <h3 className="roadmap-title roadmap-title-nowrap">Working now: Base + HashKey support</h3>
                     <p className="muted roadmap-description roadmap-description-nowrap">
-                      Expand detection for more advanced vulnerability classes and complex contract logic paths.
+                      Snippet and verified-address analysis are live with Base support and HashKey testnet demo flow.
                     </p>
                   </div>
                 </article>
@@ -208,9 +212,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title roadmap-title-nowrap">Cross chain contract support</h3>
+                    <h3 className="roadmap-title roadmap-title-nowrap">Hackathon MVP: DeFi / PayFi review mode</h3>
                     <p className="muted roadmap-description roadmap-description-nowrap">
-                      Add analysis support for contracts deployed on additional EVM networks beyond Base.
+                      Financial risk framing and audience-specific report views are available for HashKey workflows.
                     </p>
                   </div>
                 </article>
@@ -221,9 +225,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Richer report explanations</h3>
+                    <h3 className="roadmap-title">Hackathon MVP: HashKey Risk Radar</h3>
                     <p className="muted roadmap-description">
-                      Provide clearer risk context, examples, and follow up guidance for each finding.
+                      Curated HashKey contract entries provide ecosystem-level triage visibility with links to details.
                     </p>
                   </div>
                 </article>
@@ -234,9 +238,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Public shareable reports</h3>
+                    <h3 className="roadmap-title">Next: richer protocol context in reports</h3>
                     <p className="muted roadmap-description">
-                      Generate secure links so reports can be shared with teams, auditors, or stakeholders.
+                      Add deeper fund-flow mapping and clearer evidence trails for complex protocol architectures.
                     </p>
                   </div>
                 </article>
@@ -247,9 +251,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">GitHub and CI integration</h3>
+                    <h3 className="roadmap-title">Next: stronger CI and repository integrations</h3>
                     <p className="muted roadmap-description">
-                      Enable automated contract checks directly from repositories and CI pipelines.
+                      Expand automation hooks so teams can enforce triage checks in pull requests and release gates.
                     </p>
                   </div>
                 </article>
@@ -260,9 +264,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Batch contract analysis</h3>
+                    <h3 className="roadmap-title">Next: scaled batch and monitoring workflows</h3>
                     <p className="muted roadmap-description">
-                      Allow scanning multiple contracts or entire repositories in a single workflow.
+                      Support larger contract sets and recurring screening workflows without changing core product scope.
                     </p>
                   </div>
                 </article>
@@ -273,9 +277,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Gas optimization insights</h3>
+                    <h3 className="roadmap-title">Next: HashKey mainnet readiness validation</h3>
                     <p className="muted roadmap-description">
-                      Highlight inefficient patterns and suggest potential gas optimizations.
+                      Finalize wallet, RPC, and explorer verification checks before default HashKey mainnet rollout.
                     </p>
                   </div>
                 </article>
@@ -286,9 +290,9 @@ export default function HomePage() {
                     <span className="roadmap-connector" />
                   </div>
                   <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Expanded contract input support</h3>
+                    <h3 className="roadmap-title">Future: ecosystem trust signal integrations</h3>
                     <p className="muted roadmap-description">
-                      Support more verified source formats and complex multi file contract structures.
+                      Explore optional integration with broader ecosystem trust metadata while keeping triage focus.
                     </p>
                   </div>
                 </article>

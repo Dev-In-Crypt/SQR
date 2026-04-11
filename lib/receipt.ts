@@ -55,9 +55,9 @@ function requiredChainContext() {
       id: network.chainId,
       name: network.chainName,
       nativeCurrency: {
-        name: "Ether",
-        symbol: "ETH",
-        decimals: 18
+        name: network.nativeCurrency.name,
+        symbol: network.nativeCurrency.symbol,
+        decimals: network.nativeCurrency.decimals
       },
       rpcUrls: {
         default: {

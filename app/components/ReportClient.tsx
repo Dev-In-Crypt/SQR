@@ -43,9 +43,43 @@ interface ReportApiResponse {
     }>;
     metadata: {
       inputType: string;
+      reviewMode?: "STANDARD" | "DEFI_PAYFI";
       chainId: number;
       contractAddress?: string;
       generatedAt: string;
+    };
+    financialReview?: {
+      mode: "DEFI_PAYFI";
+      sections: Array<{
+        category: string;
+        label: string;
+        riskLevel: Severity;
+        summary: string;
+        evidence: string[];
+        observedControls?: string[];
+      }>;
+      recurringPatterns: string[];
+      manualReviewPriorities: string[];
+      observedControls?: string[];
+      integrationReadiness?: {
+        status: "GREEN" | "AMBER" | "RED";
+        confidenceScore: number;
+        rationale: string[];
+      };
+      builderReport: {
+        title: string;
+        overview: string;
+        highlights: string[];
+        nextActions: string[];
+        confidenceBoundary: string;
+      };
+      partnerReport: {
+        title: string;
+        overview: string;
+        highlights: string[];
+        nextActions: string[];
+        confidenceBoundary: string;
+      };
     };
     warnings: string[];
     scannerErrors: string[];
@@ -109,14 +143,14 @@ interface RuntimeConfigResponse {
     requiredChainHex: `0x${string}`;
     requiredNetworkName: string;
     requiredNetworkLabel: string;
-    addEthereumChain: {
-      chainId: `0x${string}`;
-      chainName: string;
-      nativeCurrency: {
-        name: "Ether";
-        symbol: "ETH";
-        decimals: 18;
-      };
+        addEthereumChain: {
+          chainId: `0x${string}`;
+          chainName: string;
+          nativeCurrency: {
+            name: string;
+            symbol: string;
+            decimals: number;
+          };
       rpcUrls: string[];
       blockExplorerUrls: string[];
     };
@@ -357,6 +391,7 @@ function normalizeSummaryText(value: string): string {
 }
 
 export default function ReportClient({ reportId, token }: { reportId: string; token: string | null }) {
+  const [audienceView, setAudienceView] = useState<"BUILDER" | "PARTNER">("BUILDER");
   const [data, setData] = useState<ReportApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -874,7 +909,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
       const providerCode = providerErrorCode(actionError);
       if (providerCode === 4001) {
-        const networkLabel = runtimeConfig?.requiredNetworkLabel || "the required Base network";
+        const networkLabel = runtimeConfig?.requiredNetworkLabel || "the required network";
         setError(`Mint requires ${networkLabel}. Wallet request was rejected.`);
         return;
       }
@@ -1008,7 +1043,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                     </button>
                   ) : null}
                   <button className="button warn" type="button" disabled={busy} onClick={mintReceipt}>
-                    Mint Base receipt
+                    Mint {runtimeConfig?.requiredNetworkLabel || "network"} receipt
                   </button>
                 </div>
 
@@ -1076,6 +1111,133 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </details>
             ))}
           </div>
+
+          {data.report.financialReview ? (
+            <div className="card stack">
+              <div className="row">
+                <h2 style={{ margin: 0 }}>DeFi / PayFi Review Mode</h2>
+                <span className="badge">{data.report.financialReview.mode}</span>
+              </div>
+              <div className="action-group">
+                <button
+                  className={`button ${audienceView === "BUILDER" ? "secondary" : "ghost"}`}
+                  type="button"
+                  onClick={() => setAudienceView("BUILDER")}
+                >
+                  Builder Report
+                </button>
+                <button
+                  className={`button ${audienceView === "PARTNER" ? "secondary" : "ghost"}`}
+                  type="button"
+                  onClick={() => setAudienceView("PARTNER")}
+                >
+                  Partner / Investor Report
+                </button>
+              </div>
+
+              <div className="stack">
+                {data.report.financialReview.integrationReadiness ? (
+                  <div className="card stack">
+                    <div className="row">
+                      <strong>Integration readiness</strong>
+                      <span className="badge">{data.report.financialReview.integrationReadiness.status}</span>
+                    </div>
+                    <div className="muted">
+                      Confidence: {data.report.financialReview.integrationReadiness.confidenceScore}/100
+                    </div>
+                    <ul>
+                      {data.report.financialReview.integrationReadiness.rationale.map((item, index) => (
+                        <li key={`readiness-rationale-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <h3 style={{ margin: 0 }}>
+                  {audienceView === "BUILDER"
+                    ? data.report.financialReview.builderReport.title
+                    : data.report.financialReview.partnerReport.title}
+                </h3>
+                <p>
+                  {audienceView === "BUILDER"
+                    ? data.report.financialReview.builderReport.overview
+                    : data.report.financialReview.partnerReport.overview}
+                </p>
+
+                <div>
+                  <strong>Highlights</strong>
+                  <ul>
+                    {(audienceView === "BUILDER"
+                      ? data.report.financialReview.builderReport.highlights
+                      : data.report.financialReview.partnerReport.highlights
+                    ).map((item, index) => (
+                      <li key={`audience-highlight-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <strong>Next actions</strong>
+                  <ul>
+                    {(audienceView === "BUILDER"
+                      ? data.report.financialReview.builderReport.nextActions
+                      : data.report.financialReview.partnerReport.nextActions
+                    ).map((item, index) => (
+                      <li key={`audience-next-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <p className="muted">
+                  {audienceView === "BUILDER"
+                    ? data.report.financialReview.builderReport.confidenceBoundary
+                    : data.report.financialReview.partnerReport.confidenceBoundary}
+                </p>
+              </div>
+
+              <div className="stack">
+                <h3 style={{ margin: 0 }}>Financial risk sections</h3>
+                {(data.report.financialReview.observedControls || []).length > 0 ? (
+                  <div>
+                    <strong>Observed controls</strong>
+                    <ul>
+                      {(data.report.financialReview.observedControls || []).map((item, index) => (
+                        <li key={`observed-control-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {data.report.financialReview.sections.map((section) => (
+                  <details key={section.category} className="card">
+                    <summary className="row" style={{ cursor: "pointer" }}>
+                      <span className={`badge ${section.riskLevel}`}>{section.riskLevel}</span>
+                      <strong>{section.label}</strong>
+                    </summary>
+                    <div className="stack" style={{ marginTop: 10 }}>
+                      <p>{section.summary}</p>
+                      {section.evidence.length > 0 ? (
+                        <ul>
+                          {section.evidence.map((item, index) => (
+                            <li key={`${section.category}-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {(section.observedControls || []).length > 0 ? (
+                        <div>
+                          <strong>Control signals</strong>
+                          <ul>
+                            {(section.observedControls || []).map((item, index) => (
+                              <li key={`${section.category}-control-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="card stack">
             <h2 style={{ margin: 0 }}>AI Audit Findings ({data.report.aiAuditFindings?.length ?? 0})</h2>

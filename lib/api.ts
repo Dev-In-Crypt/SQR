@@ -68,6 +68,18 @@ export function fail(status: number, code: string, message: string): NextRespons
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
+export async function parseJsonBody<T = unknown>(request: Request): Promise<T> {
+  try {
+    return (await request.json()) as T;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new ApiError(400, "INVALID_PAYLOAD", "Malformed JSON body");
+    }
+
+    throw error;
+  }
+}
+
 export function handleRouteError(error: unknown, context: Record<string, unknown> = {}): NextResponse {
   if (error instanceof ApiError) {
     return fail(error.status, error.code, error.message);

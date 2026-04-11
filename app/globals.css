@@ -1077,6 +1077,19 @@ main > section.stack.page-container {
   padding-right: 34px;
 }
 
+select.input,
+select.select {
+  color-scheme: dark;
+}
+
+select.input option,
+select.select option,
+select.input optgroup,
+select.select optgroup {
+  background-color: #111110;
+  color: var(--ink);
+}
+
 .input::placeholder,
 .textarea::placeholder {
   color: #88867f;

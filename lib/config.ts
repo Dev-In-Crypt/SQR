@@ -13,8 +13,15 @@ const envSchema = z.object({
   BASE_RPC_URL: z.string().optional(),
   BASE_MAINNET_RPC_URL: z.string().optional(),
   BASE_SEPOLIA_RPC_URL: z.string().optional(),
+  HASHKEY_MAINNET_RPC_URL: z.string().optional(),
+  HASHKEY_TESTNET_RPC_URL: z.string().default("https://testnet.hsk.xyz"),
   BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
+  HASHKEY_TESTNET_EXPLORER_API_URL: z.string().url().default("https://testnet-explorer.hsk.xyz/api"),
+  HASHKEY_MAINNET_EXPLORER_API_URL: z.string().url().default("https://hashkey.blockscout.com/api"),
+  HASHKEY_MAINNET_ENABLED: z.string().default("false"),
+  DEFAULT_ANALYSIS_CHAIN_ID: z.coerce.number().default(133),
+  RECEIPT_CHAIN_ID: z.coerce.number().int().positive().optional(),
   SOURCIFY_API_URL: z
     .string()
     .url()
@@ -75,6 +82,10 @@ function ensureProductionConfig(env: z.infer<typeof envSchema>): void {
     problems.push("BASE_MAINNET_RPC_URL (or BASE_RPC_URL) is required when APP_ENV=production");
   }
 
+  if (env.RECEIPT_CHAIN_ID === 133 && !env.HASHKEY_TESTNET_EXPLORER_API_URL) {
+    problems.push("HASHKEY_TESTNET_EXPLORER_API_URL is required when RECEIPT_CHAIN_ID=133");
+  }
+
   if (env.PRIVATE_LINK_SECRET === "dev-secret-change-me") {
     problems.push("PRIVATE_LINK_SECRET must be replaced in production");
   } else if (env.PRIVATE_LINK_SECRET.length < 32) {
@@ -115,7 +126,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       .filter((item) => item.length > 0),
     isProd: env.NODE_ENV === "production",
     slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true",
-    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true"
+    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true",
+    HASHKEY_MAINNET_ENABLED: env.HASHKEY_MAINNET_ENABLED.toLowerCase() === "true"
   };
 }
 

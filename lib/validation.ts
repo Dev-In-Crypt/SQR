@@ -3,6 +3,7 @@ import { z } from "zod";
 export const createAnalysisSchema = z
   .object({
     inputType: z.enum(["PASTE_CODE", "BASE_ADDRESS"]),
+    reviewMode: z.enum(["STANDARD", "DEFI_PAYFI"]).default("STANDARD"),
     code: z.string().optional(),
     address: z.string().optional(),
     chainId: z.number().int(),

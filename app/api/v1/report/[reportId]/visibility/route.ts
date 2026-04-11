@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { fail, ok, handleRouteError } from "@/lib/api";
+import { fail, ok, handleRouteError, parseJsonBody } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
 import { getSessionContext } from "@/lib/session";
@@ -13,7 +13,7 @@ export async function POST(
   context: { params: Promise<{ reportId: string }> }
 ) {
   try {
-    const payload = visibilitySchema.parse(await request.json());
+    const payload = visibilitySchema.parse(await parseJsonBody(request));
     const { reportId } = await context.params;
     const session = await getSessionContext();
 
