@@ -7,12 +7,11 @@ import "../ReceiptRegistry.sol";
 contract ReceiptRegistryTest is Test {
     ReceiptRegistry internal registry;
 
-    uint256 internal ownerKey = 0x59c6995e998f97a5a0044966f094538e8d6d7f2adf0d8fcb7d500f9f8f9d3d9f;
+    uint256 internal ownerKey;
     address internal ownerWallet;
     address internal relayer = address(0xBEEF);
 
-    uint256 internal secondOwnerKey =
-        0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba;
+    uint256 internal secondOwnerKey;
     address internal secondOwnerWallet;
 
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
@@ -36,6 +35,8 @@ contract ReceiptRegistryTest is Test {
 
     function setUp() public {
         registry = new ReceiptRegistry();
+        ownerKey = uint256(keccak256("receipt-registry-owner"));
+        secondOwnerKey = uint256(keccak256("receipt-registry-second-owner"));
         ownerWallet = vm.addr(ownerKey);
         secondOwnerWallet = vm.addr(secondOwnerKey);
     }
