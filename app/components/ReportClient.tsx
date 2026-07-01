@@ -982,6 +982,28 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             </div>
           </div>
 
+          <div className="card stack memo-section report-overview">
+            <div className="section-eyebrow">Overview</div>
+            <div className="overview-grid">
+              <div className="overview-item stack">
+                <span className="meta-label">Structured findings</span>
+                <strong className="overview-value">{findings.length}</strong>
+              </div>
+              <div className="overview-item stack">
+                <span className="meta-label">AI review notes</span>
+                <strong className="overview-value">{data.report.aiAuditFindings?.length ?? 0}</strong>
+              </div>
+              <div className="overview-item stack">
+                <span className="meta-label">Warnings</span>
+                <strong className="overview-value">{data.report.warnings.length}</strong>
+              </div>
+              <div className="overview-item stack">
+                <span className="meta-label">Receipt status</span>
+                <strong className="overview-value">{data.receipt ? "Minted" : "Offchain"}</strong>
+              </div>
+            </div>
+          </div>
+
           <div className="card stack memo-section">
             <div className="section-eyebrow">Executive Summary</div>
             <h2 style={{ margin: 0 }}>Scanner Summary</h2>
@@ -1134,19 +1156,21 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             {findings.map((finding) => (
               <details key={finding.id} className="card finding-card">
-                <summary className="row" style={{ cursor: "pointer" }}>
+                <summary className="row finding-summary" style={{ cursor: "pointer" }}>
                   <span className={`badge ${finding.severity}`}>{finding.severity}</span>
-                  <strong>{finding.title}</strong>
-                  <span className="muted">confidence: {finding.confidence}%</span>
+                  <strong className="finding-title">{finding.title}</strong>
+                  <span className="muted finding-meta">confidence: {finding.confidence}%</span>
                   {finding.needsManualCheck ? <span className="badge">needs manual check</span> : null}
                 </summary>
 
-                <div className="stack" style={{ marginTop: 10 }}>
-                  <div>
-                    <strong>Why it matters:</strong> {finding.whyItMatters}
+                <div className="stack finding-body" style={{ marginTop: 10 }}>
+                  <div className="finding-copy-block">
+                    <strong>Why it matters:</strong>
+                    <p>{finding.whyItMatters}</p>
                   </div>
-                  <div>
-                    <strong>Fix direction:</strong> {finding.fixDirection}
+                  <div className="finding-copy-block">
+                    <strong>Fix direction:</strong>
+                    <p>{finding.fixDirection}</p>
                   </div>
 
                   <div className="stack">
@@ -1171,23 +1195,27 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
             {(data.report.aiAuditFindings || []).map((finding, idx) => (
               <details key={`${finding.title}-${idx}`} className="card finding-card">
-                <summary className="row" style={{ cursor: "pointer" }}>
+                <summary className="row finding-summary" style={{ cursor: "pointer" }}>
                   <span className={`badge ${finding.severity}`}>{finding.severity}</span>
-                  <strong>{finding.title}</strong>
+                  <strong className="finding-title">{finding.title}</strong>
                   <span className="badge">{finding.source}</span>
                 </summary>
-                <div className="stack" style={{ marginTop: 10 }}>
-                  <div>
-                    <strong>Location:</strong> {finding.location}
+                <div className="stack finding-body" style={{ marginTop: 10 }}>
+                  <div className="finding-copy-block">
+                    <strong>Location:</strong>
+                    <p>{finding.location}</p>
                   </div>
-                  <div>
-                    <strong>Explanation:</strong> {finding.explanation}
+                  <div className="finding-copy-block">
+                    <strong>Explanation:</strong>
+                    <p>{finding.explanation}</p>
                   </div>
-                  <div>
-                    <strong>Evidence:</strong> {finding.evidence}
+                  <div className="finding-copy-block">
+                    <strong>Evidence:</strong>
+                    <p>{finding.evidence}</p>
                   </div>
-                  <div>
-                    <strong>Fix direction:</strong> {finding.fixDirection}
+                  <div className="finding-copy-block">
+                    <strong>Fix direction:</strong>
+                    <p>{finding.fixDirection}</p>
                   </div>
                 </div>
               </details>

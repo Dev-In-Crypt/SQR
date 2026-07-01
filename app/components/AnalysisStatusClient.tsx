@@ -258,10 +258,10 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
 
   return (
     <div className="card stack status-card">
-      {!data && !error ? <div>Loading status...</div> : null}
+      {!data && !error ? <div role="status" aria-live="polite">Loading status...</div> : null}
       {data ? (
         <>
-          <div className={`status-hero tone-${statusTone(data.status)}`}>
+          <div className={`status-hero tone-${statusTone(data.status)}`} aria-live="polite">
             <div className="status-hero-copy stack">
               <div className="row status-hero-row">
                 <span className="section-eyebrow">Current State</span>
@@ -369,7 +369,7 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
         </>
       ) : null}
 
-      {error ? <div className="error">{error}</div> : null}
+      {error ? <div className="error" role="alert">{error}</div> : null}
     </div>
   );
 }

@@ -74,7 +74,7 @@ export default function HistoryClient() {
         <article className="card archive-card stack" key={item.reportId}>
           <div className="archive-row">
             <div className="archive-primary stack">
-              <div className="row">
+              <div className="row archive-badges">
                 <span className={`badge ${item.topSeverity}`}>{item.topSeverity}</span>
                 <span className="badge">{item.visibility}</span>
                 <span className="badge">{item.inputType}</span>
@@ -100,7 +100,7 @@ export default function HistoryClient() {
       ))}
 
       {cursor ? (
-        <button className="button" type="button" disabled={loading} onClick={() => fetchPage(cursor, false)}>
+        <button className="button" type="button" disabled={loading} onClick={() => fetchPage(cursor, false)} aria-busy={loading}>
           {loading ? "Loading..." : "Load more"}
         </button>
       ) : null}
