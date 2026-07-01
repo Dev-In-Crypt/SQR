@@ -1,11 +1,10 @@
 import { loadEnvConfig } from "@next/env";
 
-import { config } from "@/lib/config";
-import { logError, logInfo } from "@/lib/logger";
-
 loadEnvConfig(process.cwd());
 
 async function main() {
+  const { config } = await import("@/lib/config");
+  const { logError, logInfo } = await import("@/lib/logger");
   const { startAnalysisWorker } = await import("@/lib/queue");
   const { markStaleRunningAnalysesAsFailed } = await import("@/lib/pipeline/recover-stale-analyses");
 
@@ -36,8 +35,18 @@ async function main() {
 }
 
 main().catch((error) => {
-  logError("Worker boot failed", {
-    message: error instanceof Error ? error.message : String(error)
-  });
-  process.exit(1);
+  const message = error instanceof Error ? error.message : String(error);
+
+  import("@/lib/logger")
+    .then(({ logError }) => {
+      logError("Worker boot failed", {
+        message
+      });
+    })
+    .catch(() => {
+      console.error(message);
+    })
+    .finally(() => {
+      process.exit(1);
+    });
 });
