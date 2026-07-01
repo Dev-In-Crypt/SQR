@@ -488,14 +488,25 @@ For questions regarding these Terms or the Service, you may contact:
 
 sqrsupport@gmail.com`;
 
+const termsParagraphs = termsText.split("\n\n");
+
 export default function TermsPage() {
   return (
     <section className="stack page-container">
-      <div className="card stack">
+      <div className="card stack page-hero-card legal-page">
+        <div className="section-eyebrow">Legal</div>
         <h1>Terms and Conditions</h1>
-        <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-          {termsText}
+        <p className="muted page-intro">
+          These terms govern access to the product, use of generated reports, account-linked actions, and the limits of
+          automated security review.
         </p>
+        <div className="stack legal-copy legal-copy-dense">
+          {termsParagraphs.map((paragraph) => (
+            <p className="muted" key={paragraph}>
+              {paragraph}
+            </p>
+          ))}
+        </div>
       </div>
     </section>
   );
