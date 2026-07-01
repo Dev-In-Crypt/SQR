@@ -62,6 +62,24 @@ wait_for_http_200() {
   return 1
 }
 
+wait_for_service_active() {
+  local service_name="$1"
+  local attempts="${2:-15}"
+  local sleep_seconds="${3:-2}"
+  local attempt=""
+
+  for attempt in $(seq 1 "$attempts"); do
+    if sudo -n systemctl is-active --quiet "$service_name"; then
+      return 0
+    fi
+
+    log "Service ${attempt}/${attempts} not active yet: ${service_name}"
+    sleep "$sleep_seconds"
+  done
+
+  return 1
+}
+
 prune_old_backups() {
   local keep_count="${1:-5}"
   local backups
@@ -95,8 +113,11 @@ rollback() {
   rm -rf "$NEXT_DIR"
   cp -a "$BACKUP_DIR" "$NEXT_DIR"
 
-  sudo -n systemctl reset-failed sqr-web || true
-  sudo -n systemctl restart sqr-web || true
+  sudo -n systemctl reset-failed sqr-web sqr-worker || true
+  sudo -n systemctl restart sqr-web sqr-worker || true
+
+  wait_for_service_active sqr-web 20 2 || true
+  wait_for_service_active sqr-worker 20 2 || true
 
   if wait_for_http_200 "$LOCAL_HEALTH_URL" 20 2; then
     log "Rollback local health check passed"
@@ -149,6 +170,11 @@ main() {
     exit 1
   fi
 
+  if ! sudo -n systemctl is-enabled sqr-worker >/dev/null 2>&1; then
+    log "sqr-worker service is not enabled or not found"
+    exit 1
+  fi
+
   if ! sudo -n systemctl is-active nginx >/dev/null 2>&1; then
     log "nginx service is not active"
     exit 1
@@ -170,9 +196,13 @@ main() {
     npm run build
   )
 
-  log "Restarting sqr-web service"
-  sudo -n systemctl reset-failed sqr-web
-  sudo -n systemctl restart sqr-web
+  log "Restarting sqr-web and sqr-worker services"
+  sudo -n systemctl reset-failed sqr-web sqr-worker
+  sudo -n systemctl restart sqr-web sqr-worker
+
+  log "Waiting for systemd services"
+  wait_for_service_active sqr-web 20 2
+  wait_for_service_active sqr-worker 20 2
 
   log "Waiting for local health endpoint"
   wait_for_http_200 "$LOCAL_HEALTH_URL" 30 2
