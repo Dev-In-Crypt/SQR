@@ -1,5 +1,84 @@
 import HomeForm from "@/app/components/HomeForm";
 
+const capabilities = [
+  {
+    title: "Input coverage",
+    body: "Review Solidity snippets or verified Base contract addresses without changing the underlying submission flow."
+  },
+  {
+    title: "Static review",
+    body: "Run deterministic tool-assisted analysis to catch common implementation risks, unsafe patterns, and structural issues early."
+  },
+  {
+    title: "AI logic review",
+    body: "Layer AI-assisted reasoning on top of static outputs to surface logic concerns that deserve manual confirmation."
+  },
+  {
+    title: "Structured findings",
+    body: "Turn the result into a readable memo with severity, evidence, remediation direction, and review constraints."
+  },
+  {
+    title: "Sharing controls",
+    body: "Keep reports private by default, publish when needed, or generate a controlled private link for external review."
+  },
+  {
+    title: "Onchain provenance",
+    body: "Optionally mint a Base receipt to anchor report provenance without turning the report into a security guarantee."
+  }
+] as const;
+
+const pinnedTruths = [
+  {
+    question: "Not a full audit",
+    answer: "This product is an automated review layer for fast risk screening. It is useful before deeper manual review, not a replacement for it."
+  },
+  {
+    question: "Private by default",
+    answer: "Reports remain private unless the owner explicitly changes visibility or creates a share link."
+  },
+  {
+    question: "Receipt proves provenance",
+    answer: "The optional Base receipt proves that a specific report hash existed at a point in time. It does not certify the contract as secure."
+  }
+] as const;
+
+const roadmapGroups = [
+  {
+    title: "Shipped",
+    items: [
+      "Private reports with owner-scoped access control",
+      "Public and private visibility controls",
+      "Private share links for controlled external review",
+      "Deterministic report hashes and optional Base receipts",
+      "Snippet and verified Base contract analysis"
+    ]
+  },
+  {
+    title: "In Progress",
+    items: [
+      "Deeper static-analysis coverage across more vulnerability classes",
+      "Richer remediation guidance and clearer report explanation layers",
+      "More resilient verified-source handling for complex contract structures"
+    ]
+  },
+  {
+    title: "Next",
+    items: [
+      "GitHub and CI-triggered review workflows",
+      "Batch analysis for multiple contracts in one session",
+      "Gas optimization insights alongside security findings"
+    ]
+  },
+  {
+    title: "Exploration",
+    items: [
+      "Multi-chain expansion beyond the current Base-focused production workflow",
+      "Repository-level review surfaces",
+      "Team review and collaboration workflows"
+    ]
+  }
+] as const;
+
 export default function HomePage() {
   return (
     <div className="stack page-stack homepage">
@@ -9,14 +88,29 @@ export default function HomePage() {
             <div className="hero-surface">
               <div className="hero-grid">
                 <div className="stack hero-copy">
-                  <h1>Solidity Quick Review</h1>
+                  <div className="section-eyebrow">Confidential Solidity Review Workspace</div>
+                  <h1>Premium risk triage for Solidity code before it reaches production.</h1>
                   <p className="hero-subheadline">
-                    Check Solidity snippets and verified Base contracts in minutes with AI-assisted static analysis and
-                    structured findings you can share when needed.
+                    Review snippets and verified Base contracts through a private, structured workflow that combines
+                    static analysis, AI-assisted logic review, and shareable evidence.
                   </p>
-                  <p className="hero-subheadline hero-subheadline-secondary">
-                    Surface potential vulnerabilities and logic issues early, before they reach production.
-                  </p>
+                  <div className="trust-strip" role="list" aria-label="Core product guarantees">
+                    <span className="trust-chip" role="listitem">Private by default</span>
+                    <span className="trust-chip" role="listitem">Static + AI review</span>
+                    <span className="trust-chip" role="listitem">Deterministic report hash</span>
+                    <span className="trust-chip" role="listitem">Optional Base receipt</span>
+                  </div>
+                  <div className="hero-memo-preview">
+                    <div className="memo-kicker">Review output</div>
+                    <div className="memo-preview-row">
+                      <strong>Memo-style report</strong>
+                      <span className="badge">Evidence</span>
+                    </div>
+                    <p className="muted">
+                      Findings, severity, ownership controls, and provenance are presented as one coherent review memo
+                      instead of scattered output blocks.
+                    </p>
+                  </div>
                 </div>
                 <div className="hero-analyzer">
                   <HomeForm />
@@ -31,42 +125,37 @@ export default function HomePage() {
         <div className="zone zone-soft">
           <div className="zone-inner">
             <div className="stack section-card section-frame">
-              <h2>How it works</h2>
+              <div className="section-eyebrow">Workflow</div>
+              <h2>How the review flow works</h2>
               <ol className="steps polished-steps">
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">Submit Solidity snippets or verified Base contract addresses.</strong>{" "}
-                    The system retrieves the source code for analysis.
+                    <strong className="how-step-lead">Submit a snippet or verified Base contract.</strong> The system
+                    normalizes the source and prepares it for the same review pipeline used across the product.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      We run multiple static analysis tools to detect vulnerabilities and risky coding patterns before
-                      deployment.
-                    </strong>
+                    <strong className="how-step-lead">Run static analysis and structural extraction.</strong> This
+                    surfaces implementation risks, suspicious patterns, and core contract structure before AI review.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      AI logic review checks contract behavior and highlights suspicious flows.
-                    </strong>{" "}
-                    An AI powered review analyzes contract logic and flags unusual or potentially dangerous behavior.
+                    <strong className="how-step-lead">Layer AI-assisted logic review.</strong> The memo highlights
+                    behavioral concerns that deserve human verification, not blind trust.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">
-                      You receive a structured report with severities, evidence, and guidance.
-                    </strong>{" "}
-                    The results are returned as a structured report with severity levels and clear explanations.
+                    <strong className="how-step-lead">Receive a structured security memo.</strong> Findings are grouped
+                    by severity with evidence, remediation direction, and transparency around scope limits.
                   </span>
                 </li>
                 <li>
                   <span className="how-step-copy">
-                    <strong className="how-step-lead">Optionally mint an onchain receipt so you can prove what was reviewed.</strong>{" "}
-                    You can optionally mint an onchain receipt to record what code was analyzed and when.
+                    <strong className="how-step-lead">Share or anchor the result when needed.</strong> Owners can
+                    manage visibility, create a private link, or mint an optional Base receipt for provenance.
                   </span>
                 </li>
               </ol>
@@ -75,40 +164,19 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="features" className="anchor-section section-zone">
+      <section id="capabilities" className="anchor-section section-zone">
         <div className="zone zone-deep">
           <div className="zone-inner">
             <div className="stack section-card section-card-contrast">
-              <h2>Features</h2>
+              <div className="section-eyebrow">Capabilities</div>
+              <h2>Designed for review quality, not generic dashboard noise</h2>
               <div className="features-grid">
-                <article className="info-block stack">
-                  <h3>Solidity developers</h3>
-                  <p className="muted">
-                    Run fast pre-deployment checks on snippets and prototypes, with findings grouped by severity so you
-                    can fix the riskiest issues first.
-                  </p>
-                </article>
-                <article className="info-block stack">
-                  <h3>Base builders and teams</h3>
-                  <p className="muted">
-                    Review verified Base contracts before deeper manual audits, integrations, or launches, and keep a
-                    record of what was checked.
-                  </p>
-                </article>
-                <article className="info-block stack">
-                  <h3>Projects and users</h3>
-                  <p className="muted">
-                    Add an extra automated review step before you trust or integrate a contract, and share the report
-                    with stakeholders in a readable format.
-                  </p>
-                </article>
-                <article className="info-block stack">
-                  <h3>Deterministic and shareable output</h3>
-                  <p className="muted">
-                    Use deterministic report hashes and optional onchain receipts to show which code was scanned and
-                    which findings were produced at that time.
-                  </p>
-                </article>
+                {capabilities.map((capability) => (
+                  <article className="info-block stack" key={capability.title}>
+                    <h3>{capability.title}</h3>
+                    <p className="muted">{capability.body}</p>
+                  </article>
+                ))}
               </div>
             </div>
           </div>
@@ -119,7 +187,16 @@ export default function HomePage() {
         <div className="zone zone-faq">
           <div className="zone-inner">
             <div className="stack section-card section-frame">
+              <div className="section-eyebrow">Reference</div>
               <h2>FAQ</h2>
+              <div className="truth-grid">
+                {pinnedTruths.map((item) => (
+                  <article className="truth-card stack" key={item.question}>
+                    <h3>{item.question}</h3>
+                    <p className="muted">{item.answer}</p>
+                  </article>
+                ))}
+              </div>
               <div className="stack faq-list">
                 <details className="faq-item">
                   <summary>Who is this for?</summary>
@@ -187,111 +264,23 @@ export default function HomePage() {
         <div className="zone zone-roadmap">
           <div className="zone-inner">
             <div className="stack section-card section-frame">
+              <div className="section-eyebrow">Roadmap</div>
               <h2>Roadmap</h2>
-              <div className="roadmap-timeline" role="list">
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">01</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title roadmap-title-nowrap">Deeper static analysis coverage</h3>
-                    <p className="muted roadmap-description roadmap-description-nowrap">
-                      Expand detection for more advanced vulnerability classes and complex contract logic paths.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">02</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title roadmap-title-nowrap">Cross chain contract support</h3>
-                    <p className="muted roadmap-description roadmap-description-nowrap">
-                      Add analysis support for contracts deployed on additional EVM networks beyond Base.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">03</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Richer report explanations</h3>
-                    <p className="muted roadmap-description">
-                      Provide clearer risk context, examples, and follow up guidance for each finding.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">04</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Public shareable reports</h3>
-                    <p className="muted roadmap-description">
-                      Generate secure links so reports can be shared with teams, auditors, or stakeholders.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">05</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">GitHub and CI integration</h3>
-                    <p className="muted roadmap-description">
-                      Enable automated contract checks directly from repositories and CI pipelines.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">06</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Batch contract analysis</h3>
-                    <p className="muted roadmap-description">
-                      Allow scanning multiple contracts or entire repositories in a single workflow.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">07</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Gas optimization insights</h3>
-                    <p className="muted roadmap-description">
-                      Highlight inefficient patterns and suggest potential gas optimizations.
-                    </p>
-                  </div>
-                </article>
-
-                <article className="roadmap-item" role="listitem">
-                  <div className="roadmap-rail" aria-hidden="true">
-                    <span className="roadmap-index">08</span>
-                    <span className="roadmap-connector" />
-                  </div>
-                  <div className="roadmap-panel">
-                    <h3 className="roadmap-title">Expanded contract input support</h3>
-                    <p className="muted roadmap-description">
-                      Support more verified source formats and complex multi file contract structures.
-                    </p>
-                  </div>
-                </article>
+              <div className="roadmap-columns">
+                {roadmapGroups.map((group) => (
+                  <article className="roadmap-column stack" key={group.title}>
+                    <div className="row roadmap-column-head">
+                      <span className="badge">{group.title}</span>
+                    </div>
+                    <div className="roadmap-list" role="list">
+                      {group.items.map((item) => (
+                        <div className="roadmap-panel" role="listitem" key={item}>
+                          <p className="roadmap-description">{item}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
               </div>
             </div>
           </div>

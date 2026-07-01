@@ -175,6 +175,15 @@ export default function HomeForm() {
 
   return (
     <form className="card stack home-form" onSubmit={onSubmit}>
+      <div className="home-form-header stack">
+        <div className="memo-kicker">Start a review</div>
+        <div className="row home-form-meta">
+          <span className="badge">Base focused</span>
+          <span className="badge">Private reports</span>
+          <span className="badge">Memo output</span>
+        </div>
+      </div>
+
       <div className="home-tab-row" role="tablist" aria-label="Analyze input type">
         <button
           className={`home-tab ${tab === "PASTE_CODE" ? "is-active" : ""}`}
@@ -206,6 +215,9 @@ export default function HomeForm() {
         {tab === "PASTE_CODE" ? (
           <label className="stack home-input-group">
             <span>Solidity snippet (max 200 lines)</span>
+            <p className="muted home-mode-copy">
+              Use this mode for fast pre-deployment review of excerpts, prototypes, or isolated contracts.
+            </p>
             <textarea
               className="textarea home-textarea"
               aria-invalid={showSnippetWarning}
@@ -225,13 +237,16 @@ export default function HomeForm() {
         ) : (
           <div className="stack home-input-group">
             <div className="stack home-wallet-state">
-              <span>Wallet authentication is required for address analysis.</span>
+              <span>Wallet authentication is required for verified-address analysis.</span>
               <span className="muted">
                 {walletAddress ? `Wallet connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Wallet not connected"}
               </span>
             </div>
             <label className="stack">
               <span>Base contract address</span>
+              <p className="muted home-mode-copy">
+                Use this mode when you want to review verified Base contracts and preserve owner-linked access controls.
+              </p>
               <input
                 className="input home-address-input"
                 value={address}
@@ -261,6 +276,10 @@ export default function HomeForm() {
         >
           {busy ? ctaBusyLabel : ctaIdleLabel}
         </button>
+      </div>
+
+      <div className="home-postscript muted">
+        Reports include severity, evidence, remediation direction, ownership controls, and optional onchain provenance.
       </div>
 
       {error ? <div className="error" role="alert">{error}</div> : null}

@@ -348,6 +348,22 @@ function shortenHash(value: string): string {
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
 }
 
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+function statusSummary(data: ReportApiResponse): string {
+  if (data.report.partialReasons.length > 0 || data.report.scannerErrors.length > 0) {
+    return "The report is usable, but some stages completed with limited coverage or operational constraints.";
+  }
+
+  if (data.report.findings.length === 0 && (data.report.aiAuditFindings?.length ?? 0) === 0) {
+    return "The automated review did not identify findings within the current scope. Independent validation may still reveal issues outside that scope.";
+  }
+
+  return "The memo below combines structured findings, AI-assisted review notes, and provenance controls for follow-up review.";
+}
+
 function normalizeSummaryText(value: string): string {
   return value
     .replace(/secure for deployment/gi, "did not identify findings within the current automated review scope")
@@ -920,41 +936,56 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     <div className="stack">
       {data ? (
         <>
-          <div className="card stack">
-            <div className="row">
-              <h1 style={{ margin: 0 }}>Security Report</h1>
-              <span className={`badge ${data.topSeverity}`}>{data.topSeverity}</span>
-              <span className="badge">{data.visibility}</span>
+          <div className="card stack memo-surface report-cover">
+            <div className="row report-cover-row">
+              <div className="stack report-cover-copy">
+                <div className="section-eyebrow">Security Review Memo</div>
+                <h1 style={{ margin: 0 }}>Security Report</h1>
+                <p className="muted page-intro">{statusSummary(data)}</p>
+              </div>
+              <div className="row report-cover-badges">
+                <span className={`badge ${data.topSeverity}`}>{data.topSeverity}</span>
+                <span className="badge">{data.visibility}</span>
+                {data.isOwner ? <span className="badge">Owner view</span> : <span className="badge">Viewer access</span>}
+              </div>
             </div>
-            <div className="row">
+
+            <div className="metadata-grid report-meta-grid">
+              <div className="metadata-item stack">
+                <span className="meta-label">Generated</span>
+                <div className="meta-value">{formatDateTime(data.report.metadata.generatedAt)}</div>
+              </div>
+              <div className="metadata-item stack">
+                <span className="meta-label">Input type</span>
+                <div className="meta-value">{displayInputType(data.report.metadata.inputType, data.report.metadata.contractAddress)}</div>
+              </div>
+              <div className="metadata-item stack">
+                <span className="meta-label">Chain</span>
+                <div className="meta-value">Base ({data.report.metadata.chainId})</div>
+              </div>
+              <div className="metadata-item stack">
+                <span className="meta-label">Report hash</span>
+                <div className="meta-value mono-wrap">{shortenHash(data.reportHash)}</div>
+              </div>
+            </div>
+
+            <div className="action-group">
               <span className="muted">Report hash: {shortenHash(data.reportHash)}</span>
               <button className="button ghost" type="button" onClick={copyHash}>
                 {copiedHash ? "Copied" : "Copy hash"}
               </button>
+              {data.receipt ? (
+                <Link className="button secondary" href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
+                  View receipt
+                </Link>
+              ) : null}
             </div>
+          </div>
 
-            {coverage ? (
-              <div className="stack">
-                <h2 style={{ margin: 0 }}>Analysis Coverage</h2>
-                <div className="grid-2">
-                  <div>
-                    <strong>Static analysis:</strong> {coverage.staticAnalysis}
-                  </div>
-                  <div>
-                    <strong>AI logic review:</strong> {coverage.aiLogicReview}
-                  </div>
-                  <div>
-                    <strong>Input type:</strong> {coverage.inputType}
-                  </div>
-                  <div>
-                    <strong>Report hash:</strong> {coverage.reportHashMode}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="stack">
-              <h2 style={{ margin: 0 }}>Scanner Summary</h2>
+          <div className="card stack memo-section">
+            <div className="section-eyebrow">Executive Summary</div>
+            <h2 style={{ margin: 0 }}>Scanner Summary</h2>
+            <div className="memo-body stack">
               {summaryView.paragraphs.length > 0
                 ? summaryView.paragraphs.map((paragraph, index) => <p key={`summary-paragraph-${index}`}>{paragraph}</p>)
                 : null}
@@ -989,10 +1020,47 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 {SCANNER_SUMMARY_NOTES[Math.min(DEFAULT_SCANNER_SUMMARY_NOTE_INDEX, SCANNER_SUMMARY_NOTES.length - 1)]}
               </p>
             </div>
+          </div>
 
-            {data.isOwner ? (
-              <div className="stack">
-                <hr className="divider" />
+          {coverage ? (
+            <div className="card stack memo-section">
+              <div className="section-eyebrow">Scope</div>
+              <h2 style={{ margin: 0 }}>Analysis Coverage</h2>
+              <div className="metadata-grid">
+                <div className="metadata-item stack">
+                  <span className="meta-label">Static analysis</span>
+                  <div className="meta-value">{coverage.staticAnalysis}</div>
+                </div>
+                <div className="metadata-item stack">
+                  <span className="meta-label">AI logic review</span>
+                  <div className="meta-value">{coverage.aiLogicReview}</div>
+                </div>
+                <div className="metadata-item stack">
+                  <span className="meta-label">Input</span>
+                  <div className="meta-value">{coverage.inputType}</div>
+                </div>
+                <div className="metadata-item stack">
+                  <span className="meta-label">Report hash mode</span>
+                  <div className="meta-value">{coverage.reportHashMode}</div>
+                </div>
+                {data.report.metadata.contractAddress ? (
+                  <div className="metadata-item stack metadata-item-wide">
+                    <span className="meta-label">Verified contract</span>
+                    <div className="meta-value mono-wrap">{data.report.metadata.contractAddress}</div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {data.isOwner ? (
+            <div className="card stack memo-section">
+              <div className="section-eyebrow">Ownership & Sharing</div>
+              <h2 style={{ margin: 0 }}>Administrative Controls</h2>
+              <p className="muted">
+                Visibility, private-link creation, and receipt minting are owner-controlled actions tied to this report.
+              </p>
+              <div className="action-panel stack">
                 <div className="action-group">
                   <button
                     className="button secondary"
@@ -1013,42 +1081,59 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 </div>
 
                 {shareLink ? (
-                  <div className="stack">
+                  <div className="note-panel stack">
                     <div className="muted">Private link:</div>
                     <pre>{shareLink}</pre>
                   </div>
                 ) : null}
 
                 {mintPayload ? (
-                  <div className="stack">
-                    <div className="muted">Prepared transaction payload:</div>
+                  <div className="note-panel stack">
+                    <span className="meta-label">Prepared transaction payload</span>
                     <pre>{JSON.stringify(mintPayload, null, 2)}</pre>
                   </div>
                 ) : null}
               </div>
-            ) : null}
-
-          </div>
-
-          {data.receipt ? (
-            <div className="card stack">
-              <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
-              <div>txHash: {data.receipt.txHash}</div>
-              <div>minter (tx sender): {data.receipt.receiptMinter}</div>
-              <Link href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
-                Open receipt details
-              </Link>
             </div>
           ) : null}
 
-          <div className="card stack">
+          {data.receipt ? (
+            <div className="card stack memo-section">
+              <div className="section-eyebrow">Provenance</div>
+              <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
+              <div className="metadata-grid">
+                <div className="metadata-item stack">
+                  <span className="meta-label">Transaction hash</span>
+                  <div className="meta-value mono-wrap">{data.receipt.txHash}</div>
+                </div>
+                <div className="metadata-item stack">
+                  <span className="meta-label">Minter</span>
+                  <div className="meta-value mono-wrap">{data.receipt.receiptMinter}</div>
+                </div>
+              </div>
+              <Link className="button secondary" href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
+                Open receipt details
+              </Link>
+            </div>
+          ) : (
+            <div className="card stack memo-section note-panel">
+              <div className="section-eyebrow">Provenance</div>
+              <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
+              <p className="muted">
+                No receipt is attached yet. The report remains offchain unless the owner chooses to mint a Base receipt.
+              </p>
+            </div>
+          )}
+
+          <div className="card stack memo-section">
+            <div className="section-eyebrow">Key Findings</div>
             <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
             {findings.length === 0 ? (
               <div>No findings were identified within the current automated review scope.</div>
             ) : null}
 
             {findings.map((finding) => (
-              <details key={finding.id} className="card">
+              <details key={finding.id} className="card finding-card">
                 <summary className="row" style={{ cursor: "pointer" }}>
                   <span className={`badge ${finding.severity}`}>{finding.severity}</span>
                   <strong>{finding.title}</strong>
@@ -1077,14 +1162,15 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             ))}
           </div>
 
-          <div className="card stack">
+          <div className="card stack memo-section">
+            <div className="section-eyebrow">AI Review Notes</div>
             <h2 style={{ margin: 0 }}>AI Audit Findings ({data.report.aiAuditFindings?.length ?? 0})</h2>
             {(data.report.aiAuditFindings?.length ?? 0) === 0 ? (
               <div>No confirmed AI findings based on provided code evidence.</div>
             ) : null}
 
             {(data.report.aiAuditFindings || []).map((finding, idx) => (
-              <details key={`${finding.title}-${idx}`} className="card">
+              <details key={`${finding.title}-${idx}`} className="card finding-card">
                 <summary className="row" style={{ cursor: "pointer" }}>
                   <span className={`badge ${finding.severity}`}>{finding.severity}</span>
                   <strong>{finding.title}</strong>
@@ -1107,6 +1193,43 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </details>
             ))}
           </div>
+
+          {data.report.scannerErrors.length > 0 || data.report.partialReasons.length > 0 || data.report.warnings.length > 0 ? (
+            <div className="card stack memo-section note-panel caution-panel">
+              <div className="section-eyebrow">Scope Notes</div>
+              <h2 style={{ margin: 0 }}>Constraints and Transparency</h2>
+              {data.report.warnings.length > 0 ? (
+                <div className="stack">
+                  <strong>Warnings</strong>
+                  <ul className="scanner-summary-list">
+                    {data.report.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {data.report.partialReasons.length > 0 ? (
+                <div className="stack">
+                  <strong>Partial reasons</strong>
+                  <ul className="scanner-summary-list">
+                    {data.report.partialReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {data.report.scannerErrors.length > 0 ? (
+                <div className="stack">
+                  <strong>Scanner errors</strong>
+                  <ul className="scanner-summary-list">
+                    {data.report.scannerErrors.map((scannerError) => (
+                      <li key={scannerError}>{scannerError}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
         </>
       ) : null}

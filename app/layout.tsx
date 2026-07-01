@@ -39,15 +39,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
         <div className="app-shell">
           <header className="topbar">
-            <Link href="/" className="brand">
-              Solidity Quick Review
-            </Link>
-            <nav className="main-nav">
-              <Link href="/#analyze">Analyze</Link>
-              <Link href="/#how-it-works">How it works</Link>
-              <Link href="/#features">Features</Link>
+            <div className="brand-block">
+              <Link href="/" className="brand">
+                Solidity Quick Review
+              </Link>
+              <span className="brand-note">Private review workspace for Solidity risk triage</span>
+            </div>
+            <nav className="main-nav" aria-label="Primary navigation">
+              <Link href="/#analyze">New Analysis</Link>
+              <Link href="/#capabilities">Capabilities</Link>
               <Link href="/#faq">FAQ</Link>
               <Link href="/#roadmap">Roadmap</Link>
+              <Link href="/history">History</Link>
             </nav>
             <div className="wallet-slot">
               <WalletButton />
@@ -56,16 +59,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main>{children}</main>
           <footer className="footer">
             <div className="footer-items">
-              <span className="footer-item">SOLIDITY QUICK REVIEW</span>
-              <span className="footer-item">&copy; 2026 All rights reserved</span>
+              <span className="footer-item">Solidity Quick Review</span>
+              <span className="footer-item">Automated screening for snippets and verified Base contracts</span>
               <Link href="/privacy" className="footer-item">
                 Privacy
               </Link>
               <Link href="/terms" className="footer-item">
                 Terms &amp; Conditions
               </Link>
+              <Link href="/history" className="footer-item">
+                Report History
+              </Link>
               <a href="mailto:sqrsupport@gmail.com" className="footer-item">
-                Support: sqrsupport@gmail.com
+                Support
               </a>
             </div>
           </footer>

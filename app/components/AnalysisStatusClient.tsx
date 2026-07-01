@@ -108,6 +108,22 @@ function failurePhaseIndex(params: {
   return 1;
 }
 
+function statusTone(status: AnalysisStatusResponse["status"]): string {
+  if (status === "FAILED") {
+    return "critical";
+  }
+
+  if (status === "PARTIAL" || status === "DONE_WITH_WARNINGS") {
+    return "warning";
+  }
+
+  if (status === "COMPLETED") {
+    return "positive";
+  }
+
+  return "active";
+}
+
 export default function AnalysisStatusClient({ analysisId }: { analysisId: string }) {
   const [data, setData] = useState<AnalysisStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -241,19 +257,33 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
   }, [data]);
 
   return (
-    <div className="card stack">
+    <div className="card stack status-card">
       {!data && !error ? <div>Loading status...</div> : null}
       {data ? (
         <>
-          <div className="row">
-            <span>Status:</span>
-            <span className="badge">{data.status}</span>
+          <div className={`status-hero tone-${statusTone(data.status)}`}>
+            <div className="status-hero-copy stack">
+              <div className="row status-hero-row">
+                <span className="section-eyebrow">Current State</span>
+                <span className="badge">{data.status}</span>
+              </div>
+              <h2>{progressLabel}</h2>
+              <p className="muted">
+                {data.pipelineStage
+                  ? `Active stage: ${data.pipelineStage.replaceAll("_", " ").toLowerCase()}.`
+                  : data.status === "PARTIAL"
+                    ? "The report was generated, but at least one stage returned limited coverage or scoped completion."
+                    : data.status === "FAILED"
+                      ? "The pipeline stopped before a complete review memo could be generated."
+                      : "The pipeline is preparing the next visible stage."}
+              </p>
+            </div>
           </div>
 
-          <div className="stack">
+          <div className="stack memo-section">
+            <div className="section-eyebrow">Pipeline Progress</div>
             <h3 style={{ margin: 0 }}>Progress</h3>
-            <div className="muted">{progressLabel}</div>
-            <div className="stack progress-list">
+            <div className="stack progress-list progress-timeline">
               {ANALYSIS_PHASES.map((phase, index) => {
                 const terminal = isTerminalStatus(data.status);
                 const failedIndex =
@@ -280,8 +310,9 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
                 const isFailed = data.status === "FAILED" && isActive;
 
                 return (
-                  <div key={phase} className={`row progress-phase ${isDone ? "done" : isActive ? "active" : "pending"}`}>
-                    <span className="progress-state" aria-hidden="true">
+                  <div key={phase} className={`progress-phase ${isDone ? "done" : isActive ? "active" : "pending"}`}>
+                    <div className="row progress-phase-head">
+                      <span className="progress-state" aria-hidden="true">
                       {isDone
                         ? "done"
                         : isFailed
@@ -289,8 +320,16 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
                           : isActive
                             ? <span className="spinner" />
                             : "pending"}
-                    </span>
-                    <span>{phase}</span>
+                      </span>
+                      <strong>{phase}</strong>
+                    </div>
+                    <p className="muted progress-phase-copy">
+                      {isDone
+                        ? "This stage finished successfully within the current pipeline run."
+                        : isActive
+                          ? "This stage is actively processing now."
+                          : "This stage has not started yet in the current run."}
+                    </p>
                   </div>
                 );
               })}
@@ -298,7 +337,7 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
           </div>
 
           {analysisErrorDetails ? (
-            <div className="card error stack">
+            <div className="card error stack memo-section">
               <strong>{analysisErrorDetails.title}</strong>
               <div>{analysisErrorDetails.message}</div>
               {analysisErrorDetails.hint ? <div className="muted">{analysisErrorDetails.hint}</div> : null}
@@ -308,15 +347,23 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
           ) : null}
 
           {reportLink ? (
-            <div className="stack">
-              <Link className="button" href={reportLink} target="_blank" rel="noreferrer">
-                Open report
-              </Link>
-              {data.privateToken ? (
-                <div className="muted">Private token attached to this link.</div>
-              ) : (
-                <div className="muted">If token is missing, open report as owner and generate a share link.</div>
-              )}
+            <div className="memo-section stack">
+              <div className="section-eyebrow">Next Step</div>
+              <div className="action-panel stack">
+                <div>
+                  <strong>Report ready for review.</strong>
+                  <div className="muted">
+                    {data.privateToken
+                      ? "This link already includes the private token required for direct access."
+                      : "If token access is needed later, open the report as owner and generate a private link from the report controls."}
+                  </div>
+                </div>
+                <div className="action-group">
+                  <Link className="button" href={reportLink} target="_blank" rel="noreferrer">
+                    Open report
+                  </Link>
+                </div>
+              </div>
             </div>
           ) : null}
         </>

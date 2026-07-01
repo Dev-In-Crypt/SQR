@@ -57,27 +57,46 @@ export default function HistoryClient() {
   }, []);
 
   return (
-    <div className="stack">
-      {items.map((item) => (
-        <div className="card stack" key={item.reportId}>
-          <div className="row">
-            <span className={`badge ${item.topSeverity}`}>{item.topSeverity}</span>
-            <span className="badge">{item.visibility}</span>
-            <span className="badge">{item.inputType}</span>
-          </div>
-          <div className="muted">{new Date(item.createdAt).toLocaleString()}</div>
-          <div className="muted">{item.reportHash}</div>
-          <div className="row">
-            <Link className="button" href={`/report/${item.reportId}`}>
-              Open report
+    <div className="stack history-archive">
+      {items.length === 0 && !loading && !error ? (
+        <div className="card archive-empty stack">
+          <div className="section-eyebrow">No Reports Yet</div>
+          <p className="muted">Run a new review to start building a searchable archive of reports and receipts.</p>
+          <div className="action-group">
+            <Link className="button" href="/#analyze">
+              New analysis
             </Link>
-            {item.receipt ? (
-              <Link className="button secondary" href={`/receipt/${item.reportId}`}>
-                Receipt
-              </Link>
-            ) : null}
           </div>
         </div>
+      ) : null}
+
+      {items.map((item) => (
+        <article className="card archive-card stack" key={item.reportId}>
+          <div className="archive-row">
+            <div className="archive-primary stack">
+              <div className="row">
+                <span className={`badge ${item.topSeverity}`}>{item.topSeverity}</span>
+                <span className="badge">{item.visibility}</span>
+                <span className="badge">{item.inputType}</span>
+                <span className="badge">{item.receipt ? "Receipt minted" : "Offchain only"}</span>
+              </div>
+              <div className="archive-meta stack">
+                <div className="page-meta">{new Date(item.createdAt).toLocaleString()}</div>
+                <div className="muted archive-hash">{item.reportHash}</div>
+              </div>
+            </div>
+            <div className="archive-actions action-group">
+              <Link className="button" href={`/report/${item.reportId}`}>
+                Open report
+              </Link>
+              {item.receipt ? (
+                <Link className="button secondary" href={`/receipt/${item.reportId}`}>
+                  Receipt
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        </article>
       ))}
 
       {cursor ? (

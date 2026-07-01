@@ -1357,6 +1357,240 @@ pre {
   }
 }
 
+.brand-block {
+  display: grid;
+  gap: 3px;
+}
+
+.brand-note,
+.section-eyebrow,
+.meta-label,
+.memo-kicker,
+.page-meta {
+  font-family: var(--font-mono), "Consolas", monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.brand-note,
+.page-meta,
+.meta-label {
+  color: var(--muted);
+}
+
+.section-eyebrow,
+.memo-kicker {
+  color: var(--brand-hover);
+}
+
+.page-hero-card,
+.memo-surface {
+  gap: 16px;
+}
+
+.page-intro {
+  max-width: 66ch;
+}
+
+.trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 8px 12px;
+  color: #dedcd3;
+  font-size: 0.92rem;
+}
+
+.trust-chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-hover) 0%, var(--brand) 100%);
+  box-shadow: 0 0 0 4px rgba(255, 183, 0, 0.1);
+}
+
+.hero-memo-preview,
+.note-panel,
+.action-panel,
+.truth-card,
+.metadata-item,
+.archive-card,
+.status-hero,
+.memo-section,
+.finding-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(18, 18, 16, 0.8) 0%, rgba(10, 10, 9, 0.9) 100%);
+}
+
+.hero-memo-preview,
+.note-panel,
+.action-panel,
+.truth-card,
+.metadata-item,
+.archive-card,
+.status-hero,
+.memo-section {
+  padding: 18px;
+}
+
+.memo-preview-row,
+.report-cover-row,
+.status-hero-row,
+.roadmap-column-head {
+  justify-content: space-between;
+}
+
+.home-form-header {
+  gap: 8px;
+}
+
+.home-form-meta {
+  gap: 8px;
+}
+
+.home-mode-copy,
+.home-postscript {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.truth-grid,
+.roadmap-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.truth-card h3 {
+  margin: 0;
+}
+
+.roadmap-column {
+  gap: 12px;
+}
+
+.roadmap-list {
+  display: grid;
+  gap: 12px;
+}
+
+.roadmap-panel {
+  min-height: 100%;
+}
+
+.roadmap-description {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.status-card {
+  gap: 18px;
+}
+
+.status-hero.tone-positive {
+  border-color: rgba(198, 251, 80, 0.28);
+}
+
+.status-hero.tone-warning {
+  border-color: rgba(255, 183, 0, 0.32);
+}
+
+.status-hero.tone-critical {
+  border-color: rgba(255, 108, 95, 0.36);
+}
+
+.status-hero.tone-active {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.progress-timeline {
+  gap: 14px;
+}
+
+.progress-phase {
+  display: grid;
+  gap: 10px;
+}
+
+.progress-phase-head {
+  justify-content: flex-start;
+}
+
+.progress-phase-copy {
+  margin: 0;
+}
+
+.archive-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+}
+
+.archive-meta {
+  gap: 6px;
+}
+
+.archive-hash,
+.mono-wrap {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono), "Consolas", monospace;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metadata-item {
+  gap: 8px;
+}
+
+.metadata-item-wide {
+  grid-column: 1 / -1;
+}
+
+.meta-value {
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.report-cover-copy {
+  max-width: 60ch;
+}
+
+.report-cover-badges {
+  align-self: start;
+  justify-content: flex-end;
+}
+
+.memo-body p {
+  margin: 0;
+}
+
+.finding-card {
+  background: linear-gradient(180deg, rgba(16, 16, 14, 0.84) 0%, rgba(9, 9, 8, 0.92) 100%);
+}
+
+.caution-panel {
+  border-color: rgba(255, 183, 0, 0.3);
+}
+
 @media (max-width: 1080px) {
   .topbar {
     grid-template-columns: minmax(170px, auto) 1fr;
@@ -1379,7 +1613,14 @@ pre {
 
   .hero-grid,
   .features-grid,
-  .grid-2 {
+  .grid-2,
+  .truth-grid,
+  .roadmap-columns,
+  .metadata-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-row {
     grid-template-columns: 1fr;
   }
 
@@ -1409,6 +1650,10 @@ pre {
     gap: 10px;
   }
 
+  .brand-note {
+    max-width: 28ch;
+  }
+
   .main-nav a {
     font-size: 0.72rem;
     padding: 7px 10px;
@@ -1421,7 +1666,15 @@ pre {
   .hero-surface,
   .home-form,
   .card,
-  .section-card {
+  .section-card,
+  .hero-memo-preview,
+  .note-panel,
+  .action-panel,
+  .truth-card,
+  .metadata-item,
+  .archive-card,
+  .status-hero,
+  .memo-section {
     padding: 20px;
     border-radius: 18px;
   }
@@ -1449,6 +1702,10 @@ pre {
   }
 
   .main-nav {
+    display: none;
+  }
+
+  .brand-note {
     display: none;
   }
 
@@ -1548,8 +1805,23 @@ pre {
     gap: 8px;
   }
 
+  .roadmap-columns {
+    gap: 12px;
+  }
+
   .action-group {
     width: 100%;
+  }
+
+  .report-cover-row,
+  .status-hero-row,
+  .memo-preview-row {
+    align-items: flex-start;
+  }
+
+  .report-cover-badges,
+  .archive-actions {
+    justify-content: flex-start;
   }
 
   .footer {
