@@ -364,6 +364,33 @@ function statusSummary(data: ReportApiResponse): string {
   return "The memo below combines structured findings, AI-assisted review notes, and provenance controls for follow-up review.";
 }
 
+function severityRank(severity: Severity): number {
+  switch (severity) {
+    case "CRITICAL":
+      return 0;
+    case "HIGH":
+      return 1;
+    case "MEDIUM":
+      return 2;
+    case "LOW":
+      return 3;
+    case "INFO":
+      return 4;
+  }
+}
+
+function severityGroupLabel(severity: Severity): "Critical & High" | "Medium" | "Low & Info" {
+  if (severity === "CRITICAL" || severity === "HIGH") {
+    return "Critical & High";
+  }
+
+  if (severity === "MEDIUM") {
+    return "Medium";
+  }
+
+  return "Low & Info";
+}
+
 function normalizeSummaryText(value: string): string {
   return value
     .replace(/secure for deployment/gi, "did not identify findings within the current automated review scope")
@@ -632,6 +659,26 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
 
     return data.report.findings;
   }, [data]);
+
+  const groupedFindings = useMemo(() => {
+    const groups: Array<{
+      title: "Critical & High" | "Medium" | "Low & Info";
+      items: ReportFinding[];
+    }> = [
+      { title: "Critical & High", items: [] },
+      { title: "Medium", items: [] },
+      { title: "Low & Info", items: [] }
+    ];
+
+    const sorted = [...findings].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+
+    for (const finding of sorted) {
+      const bucket = groups.find((group) => group.title === severityGroupLabel(finding.severity));
+      bucket?.items.push(finding);
+    }
+
+    return groups.filter((group) => group.items.length > 0);
+  }, [findings]);
 
   const coverage = useMemo(() => {
     if (!data) {
@@ -967,6 +1014,10 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 <span className="meta-label">Report hash</span>
                 <div className="meta-value mono-wrap">{shortenHash(data.reportHash)}</div>
               </div>
+              <div className="metadata-item stack">
+                <span className="meta-label">Report record</span>
+                <div className="meta-value mono-wrap">{data.reportId}</div>
+              </div>
             </div>
 
             <div className="action-group">
@@ -974,13 +1025,34 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <button className="button ghost" type="button" onClick={copyHash}>
                 {copiedHash ? "Copied" : "Copy hash"}
               </button>
-              {data.receipt ? (
-                <Link className="button secondary" href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
-                  View receipt
-                </Link>
-              ) : null}
+                {data.receipt ? (
+                  <Link className="button secondary" href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>
+                    View receipt
+                  </Link>
+                ) : null}
             </div>
+
+            {!data.isOwner ? (
+              <div className="note-panel stack viewer-note">
+                <span className="meta-label">Access context</span>
+                <p className="muted">
+                  You are viewing this report through shared or published access. Administrative controls remain available
+                  only to the report owner.
+                </p>
+              </div>
+            ) : null}
           </div>
+
+          {data.report.partialReasons.length > 0 || data.report.scannerErrors.length > 0 ? (
+            <div className="card stack memo-section note-panel caution-panel partial-banner">
+              <div className="section-eyebrow">Coverage Notice</div>
+              <h2 style={{ margin: 0 }}>This report completed with limited coverage.</h2>
+              <p className="muted">
+                Findings and summary are still usable, but at least one analysis stage returned partial coverage or an
+                operational constraint. Review the transparency section before treating the memo as complete.
+              </p>
+            </div>
+          ) : null}
 
           <div className="card stack memo-section report-overview">
             <div className="section-eyebrow">Overview</div>
@@ -1151,46 +1223,67 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
             <div className="section-eyebrow">Key Findings</div>
             <h2 style={{ margin: 0 }}>Findings ({findings.length})</h2>
             {findings.length === 0 ? (
-              <div>No findings were identified within the current automated review scope.</div>
+              <div className="note-panel stack finding-empty-state">
+                <span className="meta-label">No automated findings</span>
+                <p className="muted">
+                  No findings were identified within the current automated review scope. This should be treated as a clean
+                  automated pass, not as a substitute for manual review.
+                </p>
+              </div>
             ) : null}
 
-            {findings.map((finding) => (
-              <details key={finding.id} className="card finding-card">
-                <summary className="row finding-summary" style={{ cursor: "pointer" }}>
-                  <span className={`badge ${finding.severity}`}>{finding.severity}</span>
-                  <strong className="finding-title">{finding.title}</strong>
-                  <span className="muted finding-meta">confidence: {finding.confidence}%</span>
-                  {finding.needsManualCheck ? <span className="badge">needs manual check</span> : null}
-                </summary>
-
-                <div className="stack finding-body" style={{ marginTop: 10 }}>
-                  <div className="finding-copy-block">
-                    <strong>Why it matters:</strong>
-                    <p>{finding.whyItMatters}</p>
-                  </div>
-                  <div className="finding-copy-block">
-                    <strong>Fix direction:</strong>
-                    <p>{finding.fixDirection}</p>
-                  </div>
-
-                  <div className="stack">
-                    <strong>Evidence:</strong>
-                    {finding.evidence.map((evidence, idx) => (
-                      <pre key={`${finding.id}-${idx}`}>
-{`${evidence.filePath}${evidence.line ? `:${evidence.line}` : ""}\n${evidence.excerpt}`}
-                      </pre>
-                    ))}
-                  </div>
+            {groupedFindings.map((group) => (
+              <div className="stack finding-group" key={group.title}>
+                <div className="row finding-group-head">
+                  <span className="meta-label">Severity group</span>
+                  <strong>{group.title}</strong>
                 </div>
-              </details>
+                {group.items.map((finding) => (
+                  <details key={finding.id} className="card finding-card">
+                    <summary className="row finding-summary" style={{ cursor: "pointer" }}>
+                      <span className={`badge ${finding.severity}`}>{finding.severity}</span>
+                      <strong className="finding-title">{finding.title}</strong>
+                      <span className="muted finding-meta">confidence: {finding.confidence}%</span>
+                      {finding.needsManualCheck ? <span className="badge">needs manual check</span> : null}
+                    </summary>
+
+                    <div className="stack finding-body" style={{ marginTop: 10 }}>
+                      <div className="finding-copy-block">
+                        <strong>Why it matters:</strong>
+                        <p>{finding.whyItMatters}</p>
+                      </div>
+                      <div className="finding-copy-block">
+                        <strong>Fix direction:</strong>
+                        <p>{finding.fixDirection}</p>
+                      </div>
+
+                      <div className="stack">
+                        <strong>Evidence:</strong>
+                        {finding.evidence.map((evidence, idx) => (
+                          <pre key={`${finding.id}-${idx}`}>
+{`${evidence.filePath}${evidence.line ? `:${evidence.line}` : ""}\n${evidence.excerpt}`}
+                          </pre>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                ))}
+              </div>
             ))}
           </div>
 
-          <div className="card stack memo-section">
-            <div className="section-eyebrow">AI Review Notes</div>
-            <h2 style={{ margin: 0 }}>AI Audit Findings ({data.report.aiAuditFindings?.length ?? 0})</h2>
-            {(data.report.aiAuditFindings?.length ?? 0) === 0 ? (
-              <div>No confirmed AI findings based on provided code evidence.</div>
+            <div className="card stack memo-section">
+              <div className="section-eyebrow">AI Review Notes</div>
+              <h2 style={{ margin: 0 }}>AI Audit Findings ({data.report.aiAuditFindings?.length ?? 0})</h2>
+              <p className="muted">
+                These notes represent AI-assisted logic review prompts that still require human confirmation before they
+                should influence production decisions.
+              </p>
+              {(data.report.aiAuditFindings?.length ?? 0) === 0 ? (
+              <div className="note-panel stack finding-empty-state">
+                <span className="meta-label">No confirmed AI findings</span>
+                <p className="muted">No confirmed AI findings were produced from the submitted code evidence.</p>
+              </div>
             ) : null}
 
             {(data.report.aiAuditFindings || []).map((finding, idx) => (

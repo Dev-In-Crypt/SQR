@@ -1553,6 +1553,48 @@ pre {
   gap: 6px;
 }
 
+.archive-ledger-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.archive-ledger-separator {
+  opacity: 0.55;
+}
+
+.archive-summary {
+  gap: 12px;
+}
+
+.archive-filters {
+  gap: 14px;
+}
+
+.archive-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.archive-summary-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.archive-summary-item {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.archive-summary-text {
+  line-height: 1.35;
+}
+
 .archive-hash,
 .mono-wrap {
   word-break: break-word;
@@ -1586,6 +1628,23 @@ pre {
 .report-cover-badges {
   align-self: start;
   justify-content: flex-end;
+}
+
+.viewer-note,
+.finding-empty-state {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.partial-banner {
+  border-color: rgba(255, 183, 0, 0.36);
+}
+
+.finding-group {
+  gap: 12px;
+}
+
+.finding-group-head {
+  justify-content: space-between;
 }
 
 .memo-body p {
@@ -1703,6 +1762,14 @@ pre {
   .roadmap-columns,
   .metadata-grid,
   .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-summary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-filter-grid {
     grid-template-columns: 1fr;
   }
 
