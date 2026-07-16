@@ -2030,3 +2030,44 @@ pre {
     transition-duration: 0.001ms !important;
   }
 }
+
+@media print {
+  .topbar,
+  .footer,
+  .main-nav,
+  .wallet-slot,
+  .action-panel,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .card,
+  .memo-surface,
+  .finding-card,
+  .section-card {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #ccc !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .finding-group,
+  details {
+    break-inside: avoid;
+  }
+
+  details > summary {
+    list-style: none;
+  }
+
+  details[open] > summary::after {
+    content: "";
+  }
+}

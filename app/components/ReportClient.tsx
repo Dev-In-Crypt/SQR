@@ -1042,10 +1042,19 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </div>
             </div>
 
-            <div className="action-group">
+            <div className="action-group no-print">
               <span className="muted">Report hash: {shortenHash(data.reportHash)}</span>
               <button className="button ghost" type="button" onClick={copyHash}>
                 {copiedHash ? "Copied" : "Copy hash"}
+              </button>
+              <a
+                className="button ghost"
+                href={`/api/v1/report/${reportId}/export?format=md${token ? `&token=${encodeURIComponent(token)}` : ""}`}
+              >
+                Download Markdown
+              </a>
+              <button className="button ghost" type="button" onClick={() => window.print()}>
+                Print / Save as PDF
               </button>
                 {data.receipt ? (
                   <Link className="button secondary" href={`/receipt/${data.reportId}${token ? `?token=${encodeURIComponent(token)}` : ""}`}>

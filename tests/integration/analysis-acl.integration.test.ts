@@ -211,6 +211,37 @@ describe("API integration - analysis, ACL, visibility, share links", () => {
     expect(newTokenRead.status).toBe(200);
   });
 
+  it("markdown export mirrors report ACL and rejects unknown formats", async () => {
+    const owner = createSession({ ip: "198.51.100.20" });
+    const outsider = createSession({ ip: "198.51.100.21" });
+
+    const created = await createPasteAnalysisAndWait(owner);
+    const exportPath = (token: string | null, format = "md") =>
+      `/api/v1/report/${created.reportId}/export?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+
+    // Owner: 200 markdown attachment.
+    const ownerExport = await owner.request(exportPath(null));
+    expect(ownerExport.status).toBe(200);
+    expect(ownerExport.headers.get("content-type")).toContain("text/markdown");
+    expect(await ownerExport.text()).toContain("# Security Review Memo");
+
+    // Stranger without token: 403.
+    const denied = await outsider.request(exportPath(null));
+    expect(denied.status).toBe(403);
+
+    // Stranger with share token: 200.
+    const share = await owner.postJson<{ token?: string }>(
+      `/api/v1/report/${created.reportId}/share-token`,
+      {}
+    );
+    const shared = await outsider.request(exportPath(share.body.token || null));
+    expect(shared.status).toBe(200);
+
+    // Unsupported format: 400.
+    const pdf = await owner.request(exportPath(null, "pdf"));
+    expect(pdf.status).toBe(400);
+  });
+
   it("reportHash is deterministic for same input and stored hash matches API hash", async () => {
     const code = uniqueCodeSnippet("HashDeterminism");
 
