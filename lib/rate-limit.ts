@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/errors";
+import { config } from "@/lib/config";
 import { getRedis } from "@/lib/redis";
 import { logWarn } from "@/lib/logger";
 
@@ -58,8 +59,12 @@ export async function enforceAnalysisCreateRateLimit(params: {
 
   if (!wallet) {
     const ipCount = await incrementKey(`rate:${day}:anon-ip:${ip}`);
-    if (ipCount > 30) {
-      throw new ApiError(429, "RATE_LIMITED", "Daily anonymous limit reached (30/day per IP)");
+    if (ipCount > config.RATE_LIMIT_ANON_PER_DAY) {
+      throw new ApiError(
+        429,
+        "RATE_LIMITED",
+        `Daily anonymous limit reached (${config.RATE_LIMIT_ANON_PER_DAY}/day per IP)`
+      );
     }
     return;
   }
@@ -69,11 +74,15 @@ export async function enforceAnalysisCreateRateLimit(params: {
     incrementKey(`rate:${day}:wallet-ip:${ip}`)
   ]);
 
-  if (walletCount > 20) {
-    throw new ApiError(429, "RATE_LIMITED", "Daily wallet limit reached (20/day)");
+  if (walletCount > config.RATE_LIMIT_WALLET_PER_DAY) {
+    throw new ApiError(
+      429,
+      "RATE_LIMITED",
+      `Daily wallet limit reached (${config.RATE_LIMIT_WALLET_PER_DAY}/day)`
+    );
   }
 
-  if (ipCount > 20) {
+  if (ipCount > config.RATE_LIMIT_AUTH_IP_PER_DAY) {
     throw new ApiError(429, "RATE_LIMITED", "Daily IP limit reached for authenticated requests");
   }
 }

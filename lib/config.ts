@@ -55,7 +55,11 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   SESSION_COOKIE_NAME: z.string().default("sqr_session"),
   SESSION_DAYS: z.coerce.number().default(30),
-  PRIVATE_LINK_SECRET: z.string().default("dev-secret-change-me")
+  PRIVATE_LINK_SECRET: z.string().default("dev-secret-change-me"),
+  RATE_LIMIT_ANON_PER_DAY: z.coerce.number().int().min(0).default(3),
+  RATE_LIMIT_WALLET_PER_DAY: z.coerce.number().int().min(0).default(10),
+  RATE_LIMIT_AUTH_IP_PER_DAY: z.coerce.number().int().min(0).default(10),
+  ANALYSIS_REUSE_WINDOW_MINUTES: z.coerce.number().int().positive().default(1440)
 });
 
 function ensureProductionConfig(env: z.infer<typeof envSchema>): void {

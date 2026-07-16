@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { ok, handleRouteError } from "@/lib/api";
 import { ApiError } from "@/lib/errors";
+import { config } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { assertAnalysisQueueReady, enqueueAnalysisJob } from "@/lib/queue";
 import { enforceAnalysisCreateRateLimit } from "@/lib/rate-limit";
@@ -57,17 +58,25 @@ export async function POST(request: Request) {
       ? { requesterUserId: session.userId }
       : { requesterSessionId: session.sessionId };
 
-    const windowStart = new Date(Date.now() - 10 * 60 * 1000);
+    // In-flight and partial runs dedupe on a short window (stale sweeper handles hung jobs);
+    // successful reports are reused for ANALYSIS_REUSE_WINDOW_MINUTES to avoid re-running the
+    // full pipeline (and LLM spend) on identical input.
+    const inFlightWindowStart = new Date(Date.now() - 10 * 60 * 1000);
+    const reuseWindowStart = new Date(Date.now() - config.ANALYSIS_REUSE_WINDOW_MINUTES * 60 * 1000);
     const existing = await prisma.analysisRequest.findFirst({
       where: {
         inputHash,
-        createdAt: {
-          gte: windowStart
-        },
         ...requesterConstraint,
-        status: {
-          in: ["QUEUED", "RUNNING", "COMPLETED", "DONE_WITH_WARNINGS", "PARTIAL"]
-        }
+        OR: [
+          {
+            status: { in: ["QUEUED", "RUNNING", "PARTIAL"] },
+            createdAt: { gte: inFlightWindowStart }
+          },
+          {
+            status: { in: ["COMPLETED", "DONE_WITH_WARNINGS"] },
+            createdAt: { gte: reuseWindowStart }
+          }
+        ]
       },
       orderBy: {
         createdAt: "desc"
