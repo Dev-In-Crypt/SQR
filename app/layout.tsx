@@ -61,6 +61,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="footer-items">
               <span className="footer-item">Solidity Quick Review</span>
               <span className="footer-item">Automated screening for snippets and verified Base contracts</span>
+              <Link href="/verify" className="footer-item">
+                Verify Receipt
+              </Link>
               <Link href="/privacy" className="footer-item">
                 Privacy
               </Link>

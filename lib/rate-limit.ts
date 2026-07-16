@@ -50,6 +50,14 @@ async function incrementKey(key: string): Promise<number> {
   return existing.count;
 }
 
+export async function enforcePublicLookupRateLimit(params: { bucket: string; ip: string }): Promise<void> {
+  const day = todayKeyPart();
+  const count = await incrementKey(`rate:${day}:${params.bucket}:${params.ip}`);
+  if (count > config.RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY) {
+    throw new ApiError(429, "RATE_LIMITED", "Daily lookup limit reached. Try again tomorrow.");
+  }
+}
+
 export async function enforceAnalysisCreateRateLimit(params: {
   ip: string;
   wallet: string | null;

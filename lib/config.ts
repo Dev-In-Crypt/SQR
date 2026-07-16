@@ -59,6 +59,7 @@ const envSchema = z.object({
   RATE_LIMIT_ANON_PER_DAY: z.coerce.number().int().min(0).default(3),
   RATE_LIMIT_WALLET_PER_DAY: z.coerce.number().int().min(0).default(10),
   RATE_LIMIT_AUTH_IP_PER_DAY: z.coerce.number().int().min(0).default(10),
+  RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY: z.coerce.number().int().min(0).default(120),
   ANALYSIS_REUSE_WINDOW_MINUTES: z.coerce.number().int().positive().default(1440)
 });
 
