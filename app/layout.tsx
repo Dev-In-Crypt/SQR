@@ -30,6 +30,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/favicon.ico" }, { url: "/favicon.svg", type: "image/svg+xml" }],
     shortcut: "/favicon.ico"
+  },
+  other: {
+    "talentapp:project_verification":
+      "ba7c51285ea1fd0dfc40d04461710fb18651df202cc17d86c86e1072b319090ed369b0ea3dd7072d95cea137b82ae6bb28925c5fcd499c6b8cfb9544f1a22530"
   }
 };
 
