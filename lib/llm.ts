@@ -10,7 +10,7 @@ import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { getExecutiveSummarySystemPrompt, getSmartContractAuditSystemPrompt } from "@/lib/prompt-provider";
 
-function localExecutiveSummary(findings: Finding[], partialReasons: string[]): string {
+export function localExecutiveSummary(findings: Finding[], partialReasons: string[]): string {
   if (findings.length === 0) {
     return "No critical issues were detected by the active static checks. Manual review is still recommended before production deployment.";
   }

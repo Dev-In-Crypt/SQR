@@ -66,11 +66,16 @@ function paidOptionDetails(): Record<string, unknown> | undefined {
   };
 }
 
-export async function enforcePublicLookupRateLimit(params: { bucket: string; ip: string }): Promise<void> {
+export async function enforcePublicLookupRateLimit(params: {
+  bucket: string;
+  ip: string;
+  limit?: number;
+}): Promise<void> {
   const day = todayKeyPart();
+  const limit = params.limit ?? config.RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY;
   const count = await incrementKey(`rate:${day}:${params.bucket}:${params.ip}`);
-  if (count > config.RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY) {
-    throw new ApiError(429, "RATE_LIMITED", "Daily lookup limit reached. Try again tomorrow.");
+  if (count > limit) {
+    throw new ApiError(429, "RATE_LIMITED", "Daily limit reached. Try again tomorrow.");
   }
 }
 

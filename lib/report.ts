@@ -1,6 +1,6 @@
 import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
-import { generateAIAuditFindings, generateExecutiveSummary } from "@/lib/llm";
+import { generateAIAuditFindings, generateExecutiveSummary, localExecutiveSummary } from "@/lib/llm";
 import type { AIAuditFinding, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
 
 const severityRank: Record<Severity, number> = {
@@ -63,6 +63,7 @@ export async function buildReport(params: {
   sourceBundle: SourceBundle;
   aiAuditFindings?: AIAuditFinding[];
   analysisId?: string | null;
+  skipLlm?: boolean;
   onExtractingContractStructure?: () => Promise<void>;
   onRunningAIAudit?: () => Promise<void>;
   onGeneratingReport?: () => Promise<void>;
@@ -73,24 +74,28 @@ export async function buildReport(params: {
 
   await params.onExtractingContractStructure?.();
 
-  const scannerSummary = await generateExecutiveSummary({
-    findings: sortedFindings,
-    partialReasons: params.partialReasons,
-    meta
-  });
+  // Quick scans are static-only: no LLM calls for summary or audit findings.
+  const scannerSummary = params.skipLlm
+    ? localExecutiveSummary(sortedFindings, params.partialReasons)
+    : await generateExecutiveSummary({
+        findings: sortedFindings,
+        partialReasons: params.partialReasons,
+        meta
+      });
 
   await params.onRunningAIAudit?.();
 
-  const aiAuditFindings =
-    params.aiAuditFindings ??
-    (await generateAIAuditFindings({
-      sourceBundle: params.sourceBundle,
-      scannerFindings: sortedFindings,
-      warnings: params.warnings,
-      scannerErrors: params.scannerErrors,
-      partialReasons: params.partialReasons,
-      meta
-    }));
+  const aiAuditFindings = params.skipLlm
+    ? []
+    : (params.aiAuditFindings ??
+      (await generateAIAuditFindings({
+        sourceBundle: params.sourceBundle,
+        scannerFindings: sortedFindings,
+        warnings: params.warnings,
+        scannerErrors: params.scannerErrors,
+        partialReasons: params.partialReasons,
+        meta
+      })));
 
   await params.onGeneratingReport?.();
 

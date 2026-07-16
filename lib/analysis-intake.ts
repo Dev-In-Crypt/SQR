@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type AnalysisMode } from "@prisma/client";
 import type { z } from "zod";
 
 import { ApiError } from "@/lib/errors";
@@ -54,6 +54,9 @@ function requesterConstraintFor(session: SessionContext) {
  * In-flight and partial runs dedupe on a short window (stale sweeper handles hung
  * jobs); successful reports are reused for ANALYSIS_REUSE_WINDOW_MINUTES to avoid
  * re-running the full pipeline (and LLM spend) on identical input.
+ *
+ * Only FULL analyses are reusable: a static-only QUICK_SCAN must never satisfy a
+ * full or paid request for the same input (they are different products).
  */
 export async function findReusableAnalysis(params: {
   inputHash: string;
@@ -65,6 +68,7 @@ export async function findReusableAnalysis(params: {
   return prisma.analysisRequest.findFirst({
     where: {
       inputHash: params.inputHash,
+      mode: "FULL",
       ...requesterConstraintFor(params.session),
       OR: [
         {
@@ -97,8 +101,10 @@ export async function intakeAnalysis(params: {
   payload: AnalysisPayload;
   inputHash: string;
   session: SessionContext;
+  mode?: AnalysisMode;
 }): Promise<AnalysisIntakeResult> {
   const { payload, inputHash, session } = params;
+  const mode: AnalysisMode = params.mode ?? "FULL";
 
   let sourceBundle:
     | Awaited<ReturnType<typeof sourceBundleFromPaste>>
@@ -129,6 +135,7 @@ export async function intakeAnalysis(params: {
       inputType: payload.inputType,
       chainId: payload.chainId,
       inputHash,
+      mode,
       sourceHash: sourceBundle?.sourceHash,
       status: failCode ? "FAILED" : "QUEUED",
       errorCode: failCode,

@@ -476,6 +476,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           partialReasons,
           sourceBundle,
           analysisId: analysis.id,
+          skipLlm: analysis.mode === "QUICK_SCAN",
           onExtractingContractStructure: async () => {
             await setPipelineStage(analysis.id, "EXTRACTING_CONTRACT_STRUCTURE");
           },

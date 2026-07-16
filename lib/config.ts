@@ -60,6 +60,7 @@ const envSchema = z.object({
   RATE_LIMIT_WALLET_PER_DAY: z.coerce.number().int().min(0).default(10),
   RATE_LIMIT_AUTH_IP_PER_DAY: z.coerce.number().int().min(0).default(10),
   RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY: z.coerce.number().int().min(0).default(120),
+  RATE_LIMIT_QUICK_SCAN_PER_DAY: z.coerce.number().int().min(0).default(10),
   PAYMENTS_ENABLED: z.string().default("false"),
   PAYMENT_PRICE_USDC: z.coerce.number().positive().default(5),
   PAYMENT_RECEIVER_ADDRESS: z.string().optional(),

@@ -61,6 +61,11 @@ interface ReportApiResponse {
     receiptOwner: string;
     receiptMinter: string;
   } | null;
+  analysis?: {
+    inputType: string;
+    chainId: number;
+    mode?: "FULL" | "QUICK_SCAN";
+  };
 }
 
 interface PreparedReceiptResponse {
@@ -993,9 +998,26 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <div className="row report-cover-badges">
                 <span className={`badge ${data.topSeverity}`}>{data.topSeverity}</span>
                 <span className="badge">{data.visibility}</span>
+                {data.analysis?.mode === "QUICK_SCAN" ? <span className="badge">Quick scan</span> : null}
                 {data.isOwner ? <span className="badge">Owner view</span> : <span className="badge">Viewer access</span>}
               </div>
             </div>
+
+            {data.analysis?.mode === "QUICK_SCAN" ? (
+              <div className="note-panel stack" role="note">
+                <strong>Static checks only.</strong>
+                <span className="muted">
+                  This quick scan skipped the AI-assisted logic review and does not produce an
+                  onchain receipt. Run a full analysis for AI findings, a deterministic report
+                  hash, and an optional Base receipt.
+                </span>
+                <div className="row">
+                  <Link className="button" href="/">
+                    Run full AI-assisted review →
+                  </Link>
+                </div>
+              </div>
+            ) : null}
 
             <div className="metadata-grid report-meta-grid">
               <div className="metadata-item stack">

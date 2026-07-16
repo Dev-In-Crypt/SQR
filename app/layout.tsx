@@ -51,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <nav className="main-nav" aria-label="Primary navigation">
               <Link href="/#analyze">New Analysis</Link>
+              <Link href="/quick">Quick Scan</Link>
               <Link href="/#capabilities">Capabilities</Link>
               <Link href="/#faq">FAQ</Link>
               <Link href="/#roadmap">Roadmap</Link>

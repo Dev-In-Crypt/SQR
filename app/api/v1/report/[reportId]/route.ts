@@ -24,7 +24,8 @@ export async function GET(
             requesterUserId: true,
             requesterSessionId: true,
             inputType: true,
-            chainId: true
+            chainId: true,
+            mode: true
           }
         },
         findings: {
@@ -79,7 +80,8 @@ export async function GET(
       receipt,
       analysis: {
         inputType: report.analysis.inputType,
-        chainId: report.analysis.chainId
+        chainId: report.analysis.chainId,
+        mode: report.analysis.mode
       }
     });
   } catch (error) {

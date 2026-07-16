@@ -30,6 +30,11 @@ enum PipelineStage {
   GENERATING_REPORT
 }
 
+enum AnalysisMode {
+  FULL
+  QUICK_SCAN
+}
+
 enum Visibility {
   PRIVATE
   PUBLIC
@@ -81,6 +86,7 @@ model AnalysisRequest {
   chainId            Int
   inputHash          String
   sourceHash         String?
+  mode               AnalysisMode   @default(FULL)
   status             AnalysisStatus @default(QUEUED)
   pipelineStage      PipelineStage?
   errorCode          String?
