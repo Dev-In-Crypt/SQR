@@ -14,10 +14,20 @@ describe("API integration - health readiness", () => {
         ready?: boolean;
         workerCount?: number;
       };
+      receipt?: {
+        configured?: boolean;
+        ok?: boolean;
+        code?: string;
+      };
     }>("/api/v1/health");
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
+
+    // Integration setup deploys a live ReceiptRegistry on the local chain, so
+    // the receipt subsystem probe must pass against it.
+    expect(response.body.receipt?.configured).toBe(true);
+    expect(response.body.receipt?.ok).toBe(true);
 
     if (process.env.SQR_TEST_WITH_REDIS === "1") {
       expect(response.body.queue?.mode).toBe("redis");

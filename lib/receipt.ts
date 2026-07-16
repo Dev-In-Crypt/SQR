@@ -90,6 +90,57 @@ export function analyzerVersionHash(): Hex {
   return hashCanonical({ analyzerVersion: config.ANALYZER_VERSION }) as Hex;
 }
 
+export type ReceiptSubsystemHealth = {
+  configured: boolean;
+  ok: boolean;
+  code?: string;
+  checkedAt: string;
+};
+
+const RECEIPT_HEALTH_SENTINEL_HASH = `0x${"00".repeat(31)}01` as Hex;
+const RECEIPT_HEALTH_OK_TTL_MS = 5 * 60 * 1000;
+const RECEIPT_HEALTH_FAIL_TTL_MS = 30 * 1000;
+
+let receiptHealthCache: { value: ReceiptSubsystemHealth; expiresAt: number } | null = null;
+
+/**
+ * Probes the configured ReceiptRegistry with a sentinel hash. A clean
+ * "not found" proves the contract answers getByHash on the required chain;
+ * RECEIPT_CONTRACT_UNAVAILABLE indicates a deterministic misconfiguration
+ * (wrong address/chain), RECEIPT_CHAIN_UNAVAILABLE a transient RPC problem.
+ * Results are cached so health polling does not hammer the RPC.
+ */
+export async function receiptSubsystemHealth(): Promise<ReceiptSubsystemHealth> {
+  if (receiptHealthCache && receiptHealthCache.expiresAt > Date.now()) {
+    return receiptHealthCache.value;
+  }
+
+  let value: ReceiptSubsystemHealth;
+
+  if (!config.RECEIPT_CONTRACT_ADDRESS) {
+    value = { configured: false, ok: true, checkedAt: new Date().toISOString() };
+  } else {
+    try {
+      await readMintedReceiptByHash(RECEIPT_HEALTH_SENTINEL_HASH);
+      value = { configured: true, ok: true, checkedAt: new Date().toISOString() };
+    } catch (error) {
+      value = {
+        configured: true,
+        ok: false,
+        code: error instanceof ApiError ? error.code : "RECEIPT_HEALTH_ERROR",
+        checkedAt: new Date().toISOString()
+      };
+    }
+  }
+
+  receiptHealthCache = {
+    value,
+    expiresAt: Date.now() + (value.ok ? RECEIPT_HEALTH_OK_TTL_MS : RECEIPT_HEALTH_FAIL_TTL_MS)
+  };
+
+  return value;
+}
+
 export async function readOwnerMintNonce(owner: string): Promise<bigint> {
   if (!isAddress(owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
