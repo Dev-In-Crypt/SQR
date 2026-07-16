@@ -37,6 +37,7 @@
     "deploy:vps:verify": "bash scripts/verify-vps-runtime.sh"
   },
   "dependencies": {
+    "@coinbase/x402": "^2.1.0",
     "@prisma/client": "^6.0.0",
     "bullmq": "^5.12.0",
     "ioredis": "^5.4.1",
@@ -44,6 +45,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "viem": "^2.21.0",
+    "x402-fetch": "^1.2.0",
+    "x402-next": "^1.2.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -51,12 +54,12 @@
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^15.0.0",
     "prisma": "^6.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
-    "@vitest/coverage-v8": "^2.1.8",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "^15.0.0"
+    "vitest": "^2.1.8"
   }
 }

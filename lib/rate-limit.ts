@@ -50,6 +50,22 @@ async function incrementKey(key: string): Promise<number> {
   return existing.count;
 }
 
+// When payments are live, rate-limited analysis responses advertise the paid path
+// so the UI can offer "continue for $N USDC" instead of a dead end.
+function paidOptionDetails(): Record<string, unknown> | undefined {
+  if (!config.paymentsEnabled) {
+    return undefined;
+  }
+
+  return {
+    paidOption: {
+      available: true,
+      priceUsdc: config.PAYMENT_PRICE_USDC,
+      endpoint: "/api/v1/analysis/paid"
+    }
+  };
+}
+
 export async function enforcePublicLookupRateLimit(params: { bucket: string; ip: string }): Promise<void> {
   const day = todayKeyPart();
   const count = await incrementKey(`rate:${day}:${params.bucket}:${params.ip}`);
@@ -71,7 +87,8 @@ export async function enforceAnalysisCreateRateLimit(params: {
       throw new ApiError(
         429,
         "RATE_LIMITED",
-        `Daily anonymous limit reached (${config.RATE_LIMIT_ANON_PER_DAY}/day per IP)`
+        `Daily anonymous limit reached (${config.RATE_LIMIT_ANON_PER_DAY}/day per IP)`,
+        paidOptionDetails()
       );
     }
     return;
@@ -86,11 +103,17 @@ export async function enforceAnalysisCreateRateLimit(params: {
     throw new ApiError(
       429,
       "RATE_LIMITED",
-      `Daily wallet limit reached (${config.RATE_LIMIT_WALLET_PER_DAY}/day)`
+      `Daily wallet limit reached (${config.RATE_LIMIT_WALLET_PER_DAY}/day)`,
+      paidOptionDetails()
     );
   }
 
   if (ipCount > config.RATE_LIMIT_AUTH_IP_PER_DAY) {
-    throw new ApiError(429, "RATE_LIMITED", "Daily IP limit reached for authenticated requests");
+    throw new ApiError(
+      429,
+      "RATE_LIMITED",
+      "Daily IP limit reached for authenticated requests",
+      paidOptionDetails()
+    );
   }
 }

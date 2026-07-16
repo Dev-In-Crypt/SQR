@@ -64,13 +64,18 @@ export function ok<T>(data: T, status = 200): NextResponse {
   return NextResponse.json(data, { status });
 }
 
-export function fail(status: number, code: string, message: string): NextResponse {
-  return NextResponse.json({ error: { code, message } }, { status });
+export function fail(
+  status: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+): NextResponse {
+  return NextResponse.json({ error: { code, message, ...(details ? { details } : {}) } }, { status });
 }
 
 export function handleRouteError(error: unknown, context: Record<string, unknown> = {}): NextResponse {
   if (error instanceof ApiError) {
-    return fail(error.status, error.code, error.message);
+    return fail(error.status, error.code, error.message, error.details);
   }
 
   const missingTable = getMissingTableInfo(error);

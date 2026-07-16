@@ -1,88 +1,31 @@
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 
+import {
+  analysisInputHash,
+  findReusableAnalysis,
+  intakeAnalysis,
+  validateAnalysisAccess
+} from "@/lib/analysis-intake";
 import { ok, handleRouteError } from "@/lib/api";
-import { ApiError } from "@/lib/errors";
-import { config } from "@/lib/config";
-import { prisma } from "@/lib/db";
-import { assertAnalysisQueueReady, enqueueAnalysisJob } from "@/lib/queue";
 import { enforceAnalysisCreateRateLimit } from "@/lib/rate-limit";
 import { getClientIp, getSessionContext } from "@/lib/session";
-import { computeInputHash, sourceBundleFromAddress, sourceBundleFromPaste } from "@/lib/source";
 import { createAnalysisSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
-
-const NON_FATAL_SOURCE_ERROR_CODES = new Set([
-  "SOURCE_UNVERIFIED",
-  "BASESCAN_INVALID_API_KEY",
-  "BASESCAN_RATE_LIMIT",
-  "BASESCAN_TIMEOUT",
-  "BASESCAN_MALFORMED_JSON",
-  "BASESCAN_V1_DEPRECATED",
-  "BASESCAN_NOTOK",
-  "BASESCAN_HTTP_429",
-  "BASESCAN_HTTP_503"
-]);
 
 export async function POST(request: Request) {
   try {
     const payloadRaw = await request.json();
     const session = await getSessionContext();
-
-    await enforceAnalysisCreateRateLimit({
-      ip: await getClientIp(),
-      wallet: session.walletAddress
-    });
-
     const payload = createAnalysisSchema.parse(payloadRaw);
 
-    if (payload.wallet && session.walletAddress) {
-      if (payload.wallet.toLowerCase() !== session.walletAddress.toLowerCase()) {
-        throw new ApiError(403, "WALLET_MISMATCH", "Request wallet does not match authenticated wallet");
-      }
-    }
+    validateAnalysisAccess(payload, session);
 
-    if (payload.inputType === "BASE_ADDRESS" && !session.userId) {
-      throw new ApiError(401, "WALLET_REQUIRED", "Wallet login is required for Base address analysis");
-    }
+    const inputHash = analysisInputHash(payload);
 
-    const inputHash = computeInputHash({
-      inputType: payload.inputType,
-      chainId: payload.chainId,
-      code: payload.code,
-      address: payload.address
-    });
-
-    const requesterConstraint = session.userId
-      ? { requesterUserId: session.userId }
-      : { requesterSessionId: session.sessionId };
-
-    // In-flight and partial runs dedupe on a short window (stale sweeper handles hung jobs);
-    // successful reports are reused for ANALYSIS_REUSE_WINDOW_MINUTES to avoid re-running the
-    // full pipeline (and LLM spend) on identical input.
-    const inFlightWindowStart = new Date(Date.now() - 10 * 60 * 1000);
-    const reuseWindowStart = new Date(Date.now() - config.ANALYSIS_REUSE_WINDOW_MINUTES * 60 * 1000);
-    const existing = await prisma.analysisRequest.findFirst({
-      where: {
-        inputHash,
-        ...requesterConstraint,
-        OR: [
-          {
-            status: { in: ["QUEUED", "RUNNING", "PARTIAL"] },
-            createdAt: { gte: inFlightWindowStart }
-          },
-          {
-            status: { in: ["COMPLETED", "DONE_WITH_WARNINGS"] },
-            createdAt: { gte: reuseWindowStart }
-          }
-        ]
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    });
-
+    // Reuse before rate limiting: returning an existing report costs nothing,
+    // so it should neither consume quota nor produce a 429.
+    const existing = await findReusableAnalysis({ inputHash, session });
     if (existing) {
       return ok(
         {
@@ -94,65 +37,19 @@ export async function POST(request: Request) {
       );
     }
 
-    let sourceBundle:
-      | Awaited<ReturnType<typeof sourceBundleFromPaste>>
-      | Awaited<ReturnType<typeof sourceBundleFromAddress>>
-      | null = null;
-
-    let failCode: string | null = null;
-
-    try {
-      sourceBundle =
-        payload.inputType === "PASTE_CODE"
-          ? await sourceBundleFromPaste({ code: payload.code!, chainId: payload.chainId })
-          : await sourceBundleFromAddress({ address: payload.address!, chainId: payload.chainId });
-    } catch (error) {
-      if (error instanceof ApiError && NON_FATAL_SOURCE_ERROR_CODES.has(error.code)) {
-        failCode = error.code;
-      } else {
-        throw error;
-      }
-    }
-
-    if (!failCode) {
-      await assertAnalysisQueueReady();
-    }
-
-    const analysis = await prisma.analysisRequest.create({
-      data: {
-        inputType: payload.inputType,
-        chainId: payload.chainId,
-        inputHash,
-        sourceHash: sourceBundle?.sourceHash,
-        status: failCode ? "FAILED" : "QUEUED",
-        errorCode: failCode,
-        requesterUserId: session.userId,
-        requesterSessionId: session.sessionId
-      }
+    await enforceAnalysisCreateRateLimit({
+      ip: await getClientIp(),
+      wallet: session.walletAddress
     });
 
-    if (sourceBundle) {
-      await prisma.sourceBundle.create({
-        data: {
-          analysisId: analysis.id,
-          sourceJson: sourceBundle as unknown as Prisma.InputJsonValue,
-          sourceMetaJson: sourceBundle.sourceMeta as Prisma.InputJsonValue,
-          lineCount: sourceBundle.lineCount,
-          isVerifiedSource: sourceBundle.isVerifiedSource
-        }
-      });
-    }
-
-    if (!failCode) {
-      await enqueueAnalysisJob(analysis.id);
-    }
+    const result = await intakeAnalysis({ payload, inputHash, session });
 
     return ok(
       {
-        analysisId: analysis.id,
-        status: failCode ? "FAILED" : "QUEUED",
-        inputHash,
-        errorCode: failCode
+        analysisId: result.analysisId,
+        status: result.status,
+        inputHash: result.inputHash,
+        errorCode: result.errorCode
       },
       202
     );

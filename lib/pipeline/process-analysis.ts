@@ -6,6 +6,7 @@ import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
 import { logError, logInfo } from "@/lib/logger";
+import { markPaymentOutcomeForAnalysis } from "@/lib/payments";
 import { cachePrivateToken } from "@/lib/request-context";
 import { runStaticScan } from "@/lib/scanner";
 import type {
@@ -394,6 +395,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
         errorCode: "SOURCE_BUNDLE_MISSING"
       }
     });
+    await markPaymentOutcomeForAnalysis(analysis.id, "RETRY_CREDIT");
     return;
   }
 
@@ -544,6 +546,9 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
 
     await cachePrivateToken(analysis.id, privateToken).catch(() => undefined);
 
+    // Paid runs: a delivered report (even partial/with warnings) consumes the payment.
+    await markPaymentOutcomeForAnalysis(analysis.id, "CONSUMED");
+
     logInfo("Analysis processed", {
       analysisId: analysis.id,
       findings: report.findings.length,
@@ -593,5 +598,8 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
         errorCode
       }
     });
+
+    // Paid runs: a failed pipeline must not eat the payment — grant a retry credit.
+    await markPaymentOutcomeForAnalysis(analysis.id, "RETRY_CREDIT");
   }
 }

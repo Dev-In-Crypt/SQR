@@ -15,12 +15,19 @@ interface SessionResponse {
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
+interface PaidOffer {
+  priceUsdc: number;
+  endpoint: string;
+}
+
 export default function HomeForm() {
   const chainId = 8453;
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
+  const [payBusy, setPayBusy] = useState(false);
+  const [paidOffer, setPaidOffer] = useState<PaidOffer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [codeInteracted, setCodeInteracted] = useState(false);
@@ -127,35 +134,37 @@ export default function HomeForm() {
 
     setBusy(true);
     setError(null);
+    setPaidOffer(null);
 
     try {
-      const payload =
-        tab === "PASTE_CODE"
-          ? {
-              inputType: "PASTE_CODE",
-              code,
-              chainId
-            }
-          : {
-              inputType: "BASE_ADDRESS",
-              address: trimmedAddress,
-              chainId
-            };
-
       const response = await fetch("/api/v1/analysis", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(buildPayload())
       });
 
       const json = (await response.json()) as {
         analysisId?: string;
-        error?: { code?: string; message?: string };
+        error?: {
+          code?: string;
+          message?: string;
+          details?: { paidOption?: { available?: boolean; priceUsdc?: number; endpoint?: string } };
+        };
       };
 
       if (!response.ok || !json.analysisId) {
+        const paidOption = json.error?.details?.paidOption;
+        if (response.status === 429 && paidOption?.available && paidOption.endpoint) {
+          setPaidOffer({
+            priceUsdc: paidOption.priceUsdc ?? 5,
+            endpoint: paidOption.endpoint
+          });
+          setError(null);
+          return;
+        }
+
         throw new Error(
           resolveUserErrorMessage({
             code: json.error?.code,
@@ -170,6 +179,98 @@ export default function HomeForm() {
       setError(submitError instanceof Error ? submitError.message : String(submitError));
     } finally {
       setBusy(false);
+    }
+  }
+
+  function buildPayload() {
+    return tab === "PASTE_CODE"
+      ? {
+          inputType: "PASTE_CODE",
+          code,
+          chainId
+        }
+      : {
+          inputType: "BASE_ADDRESS",
+          address: trimmedAddress,
+          chainId
+        };
+  }
+
+  async function onPayAndAnalyze() {
+    if (!paidOffer || payBusy) {
+      return;
+    }
+
+    if (!window.ethereum) {
+      setError("A browser wallet is required to pay for the analysis.");
+      return;
+    }
+
+    setPayBusy(true);
+    setError(null);
+
+    try {
+      const [{ createWalletClient, custom, publicActions }, { base, baseSepolia }, { wrapFetchWithPayment }] =
+        await Promise.all([import("viem"), import("viem/chains"), import("x402-fetch")]);
+
+      const accounts = (await window.ethereum.request({
+        method: "eth_requestAccounts"
+      })) as string[];
+
+      if (!accounts?.[0]) {
+        throw new Error("No wallet account available");
+      }
+
+      const walletClient = createWalletClient({
+        account: accounts[0] as `0x${string}`,
+        chain: chainId === 8453 ? base : baseSepolia,
+        transport: custom(window.ethereum)
+      }).extend(publicActions);
+
+      const fetchWithPayment = wrapFetchWithPayment(
+        fetch,
+        walletClient as Parameters<typeof wrapFetchWithPayment>[1]
+      );
+
+      const response = await fetchWithPayment(paidOffer.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(buildPayload())
+      });
+
+      const json = (await response.json()) as {
+        analysisId?: string;
+        error?: { code?: string; message?: string; details?: { analysisId?: string } };
+      };
+
+      // A recent identical report already exists — nothing was charged.
+      if (response.status === 409 && json.error?.details?.analysisId) {
+        window.location.href = `/analysis/${json.error.details.analysisId}`;
+        return;
+      }
+
+      if (!response.ok || !json.analysisId) {
+        throw new Error(
+          resolveUserErrorMessage({
+            code: json.error?.code,
+            fallbackMessage: json.error?.message,
+            defaultMessage: "Payment or analysis failed"
+          })
+        );
+      }
+
+      window.location.href = `/analysis/${json.analysisId}`;
+    } catch (payError) {
+      const message = payError instanceof Error ? payError.message : String(payError);
+      setError(
+        message.toLowerCase().includes("user rejected") || message.toLowerCase().includes("denied")
+          ? "Payment signature was declined in the wallet."
+          : message
+      );
+    } finally {
+      setPayBusy(false);
     }
   }
 
@@ -281,6 +382,34 @@ export default function HomeForm() {
       <div className="home-postscript muted">
         Reports include severity, evidence, remediation direction, ownership controls, and optional onchain provenance.
       </div>
+
+      {paidOffer ? (
+        <div className="note-panel stack" role="status">
+          <strong>Daily free limit reached.</strong>
+          <span className="muted">
+            Continue with a paid analysis for ${paidOffer.priceUsdc.toFixed(2)} USDC on Base — the
+            wallet signs a gasless USDC authorization, no transaction fees on your side.
+          </span>
+          <div className="row">
+            <button
+              className="button"
+              type="button"
+              disabled={payBusy}
+              onClick={() => void onPayAndAnalyze()}
+            >
+              {payBusy ? "Waiting for wallet..." : `Pay $${paidOffer.priceUsdc.toFixed(2)} & analyze`}
+            </button>
+            <button
+              className="button ghost"
+              type="button"
+              disabled={payBusy}
+              onClick={() => setPaidOffer(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div className="error" role="alert">{error}</div> : null}
     </form>

@@ -60,6 +60,11 @@ const envSchema = z.object({
   RATE_LIMIT_WALLET_PER_DAY: z.coerce.number().int().min(0).default(10),
   RATE_LIMIT_AUTH_IP_PER_DAY: z.coerce.number().int().min(0).default(10),
   RATE_LIMIT_PUBLIC_LOOKUP_PER_DAY: z.coerce.number().int().min(0).default(120),
+  PAYMENTS_ENABLED: z.string().default("false"),
+  PAYMENT_PRICE_USDC: z.coerce.number().positive().default(5),
+  PAYMENT_RECEIVER_ADDRESS: z.string().optional(),
+  CDP_API_KEY_ID: z.string().optional(),
+  CDP_API_KEY_SECRET: z.string().optional(),
   ANALYSIS_REUSE_WINDOW_MINUTES: z.coerce.number().int().positive().default(1440)
 });
 
@@ -84,6 +89,12 @@ function ensureProductionConfig(env: z.infer<typeof envSchema>): void {
     problems.push("PRIVATE_LINK_SECRET must be replaced in production");
   } else if (env.PRIVATE_LINK_SECRET.length < 32) {
     problems.push("PRIVATE_LINK_SECRET must be at least 32 characters in production");
+  }
+
+  if (env.PAYMENTS_ENABLED.toLowerCase() === "true") {
+    if (!env.PAYMENT_RECEIVER_ADDRESS || !isAddress(env.PAYMENT_RECEIVER_ADDRESS)) {
+      problems.push("PAYMENT_RECEIVER_ADDRESS must be a valid address when PAYMENTS_ENABLED=true");
+    }
   }
 
   if (problems.length > 0) {
@@ -114,6 +125,7 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     OPENAI_GENERAL_MODEL: openAiGeneralModel,
     OPENAI_AUDIT_MODEL: openAiAuditModel,
     structuredAuditContextEnabled: env.ENABLE_STRUCTURED_AUDIT_CONTEXT.toLowerCase() === "true",
+    paymentsEnabled: env.PAYMENTS_ENABLED.toLowerCase() === "true",
     trustedIpHeaders: env.TRUSTED_IP_HEADERS
       .split(",")
       .map((item) => item.trim().toLowerCase())

@@ -43,6 +43,13 @@ enum Severity {
   INFO
 }
 
+enum PaymentStatus {
+  SETTLED
+  CONSUMED
+  RETRY_CREDIT
+  REFUNDED
+}
+
 model User {
   id               String            @id @default(uuid())
   walletAddress    String            @unique
@@ -189,6 +196,26 @@ model RateLimitSnapshot {
   @@unique([date, ip, wallet])
   @@index([date, wallet])
   @@map("rate_limits")
+}
+
+model Payment {
+  id                 String        @id @default(uuid())
+  payer              String
+  amountMicroUsdc    BigInt
+  chainId            Int
+  txHash             String?
+  facilitatorRef     String?
+  status             PaymentStatus @default(SETTLED)
+  analysisId         String?       @unique
+  requesterUserId    String?
+  requesterSessionId String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([payer, status, createdAt])
+  @@index([requesterUserId, status])
+  @@index([requesterSessionId, status])
+  @@map("payments")
 }
 
 
