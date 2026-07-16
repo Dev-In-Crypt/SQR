@@ -33,6 +33,7 @@
     "security:slither:triage": "slither . --config-file slither.config.json --json-types detectors --triage-mode",
     "check:db": "tsx scripts/check-db.ts",
     "benchmark:pipeline": "tsx scripts/benchmark-pipeline.ts",
+    "llm:usage": "tsx scripts/llm-usage-report.ts",
     "test:unit:cov": "vitest run --config vitest.config.ts --coverage",
     "deploy:vps": "bash scripts/deploy-vps-safe.sh",
     "deploy:vps:verify": "bash scripts/verify-vps-runtime.sh"

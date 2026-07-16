@@ -5,6 +5,7 @@ import type { AIAuditFinding, Finding, SourceBundle, StructuredAuditContext } fr
 import * as contractStructure from "@/lib/contract-structure";
 import { filterAIAuditFindings } from "@/lib/ai-audit-post-filter";
 import { config } from "@/lib/config";
+import { recordUsageFromResponse } from "@/lib/llm-usage";
 import { logError } from "@/lib/logger";
 import { describeAnalysisNote } from "@/lib/partial-reasons";
 import { getExecutiveSummarySystemPrompt, getSmartContractAuditSystemPrompt } from "@/lib/prompt-provider";
@@ -155,6 +156,7 @@ async function runWithTimeout<T>(action: () => Promise<T> | T, timeoutMs: number
 export async function generateExecutiveSummary(params: {
   findings: Finding[];
   partialReasons: string[];
+  meta?: { analysisId?: string | null };
 }): Promise<string> {
   const { findings, partialReasons } = params;
 
@@ -203,7 +205,15 @@ export async function generateExecutiveSummary(params: {
 
     const json = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
+
+    recordUsageFromResponse({
+      usage: json.usage,
+      stage: "exec_summary",
+      model: payload.model,
+      analysisId: params.meta?.analysisId
+    });
 
     const content = json.choices?.[0]?.message?.content?.trim();
     if (!content) {
@@ -226,6 +236,7 @@ export async function generateAIAuditFindings(params: {
   warnings: string[];
   scannerErrors: string[];
   partialReasons: string[];
+  meta?: { analysisId?: string | null };
 }): Promise<AIAuditFinding[]> {
   if (!config.OPENAI_API_KEY) {
     return [];
@@ -346,7 +357,15 @@ export async function generateAIAuditFindings(params: {
 
     const json = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
+
+    recordUsageFromResponse({
+      usage: json.usage,
+      stage: "ai_audit",
+      model: payload.model,
+      analysisId: params.meta?.analysisId
+    });
 
     const content = json.choices?.[0]?.message?.content?.trim();
     if (!content) {

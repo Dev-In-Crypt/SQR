@@ -62,18 +62,21 @@ export async function buildReport(params: {
   partialReasons: string[];
   sourceBundle: SourceBundle;
   aiAuditFindings?: AIAuditFinding[];
+  analysisId?: string | null;
   onExtractingContractStructure?: () => Promise<void>;
   onRunningAIAudit?: () => Promise<void>;
   onGeneratingReport?: () => Promise<void>;
 }): Promise<{ report: ReportPayload; topSeverity: Severity }> {
   const mergedFindings = mergeFindings(params.findings);
   const sortedFindings = sortFindings(mergedFindings);
+  const meta = { analysisId: params.analysisId ?? null };
 
   await params.onExtractingContractStructure?.();
 
   const scannerSummary = await generateExecutiveSummary({
     findings: sortedFindings,
-    partialReasons: params.partialReasons
+    partialReasons: params.partialReasons,
+    meta
   });
 
   await params.onRunningAIAudit?.();
@@ -85,7 +88,8 @@ export async function buildReport(params: {
       scannerFindings: sortedFindings,
       warnings: params.warnings,
       scannerErrors: params.scannerErrors,
-      partialReasons: params.partialReasons
+      partialReasons: params.partialReasons,
+      meta
     }));
 
   await params.onGeneratingReport?.();

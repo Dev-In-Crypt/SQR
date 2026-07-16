@@ -475,6 +475,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           scannerErrors: staticScan.scannerErrors,
           partialReasons,
           sourceBundle,
+          analysisId: analysis.id,
           onExtractingContractStructure: async () => {
             await setPipelineStage(analysis.id, "EXTRACTING_CONTRACT_STRUCTURE");
           },

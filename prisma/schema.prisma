@@ -198,6 +198,21 @@ model RateLimitSnapshot {
   @@map("rate_limits")
 }
 
+model LlmUsage {
+  id               String   @id @default(uuid())
+  analysisId       String?
+  stage            String
+  model            String
+  promptTokens     Int
+  completionTokens Int
+  totalTokens      Int?
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([analysisId])
+  @@map("llm_usage")
+}
+
 model Payment {
   id                 String        @id @default(uuid())
   payer              String
