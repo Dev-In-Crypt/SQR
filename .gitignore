@@ -98,6 +98,7 @@ slither.config.json
 benchmark2-slither.json
 output/benchmark2-combined-report.json
 output/benchmark2-combined-report.md
+output/pipeline-benchmark.json
 tests/e2e/debug-analyze-btn.spec.ts
 tests/e2e/hero-buttons.spec.ts
 tools/
