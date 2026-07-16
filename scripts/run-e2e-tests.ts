@@ -15,6 +15,11 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 
 import {
+  startFacilitatorStub,
+  type FacilitatorStub
+} from "../tests/integration/setup/x402-facilitator-stub";
+
+import {
   cleanEnv,
   createCleanupController,
   createRunScopedDistDir,
@@ -101,12 +106,18 @@ async function main() {
 
   let anvilProcess: ChildProcess | null = null;
   let appProcess: ChildProcess | null = null;
+  let facilitatorStub: FacilitatorStub | null = null;
 
   const cleanupController = createCleanupController({
     label: "e2e",
     cleanup: async () => {
       await stopProcessTree(appProcess, "e2e:next");
       await stopProcessTree(anvilProcess, "e2e:anvil");
+
+      if (facilitatorStub) {
+        await facilitatorStub.stop().catch(() => undefined);
+        facilitatorStub = null;
+      }
 
       const adminDbUrl = withSchema(baseDirectDatabaseUrl, "public");
       const prisma = new PrismaClient({
@@ -202,10 +213,15 @@ async function main() {
       throw new Error("Failed to deploy ReceiptRegistry for e2e tests");
     }
 
+    facilitatorStub = await startFacilitatorStub();
+
     const appEnv: NodeJS.ProcessEnv = {
       ...process.env,
       NODE_ENV: "test",
       APP_ENV: "local",
+      PAYMENTS_ENABLED: "true",
+      PAYMENT_RECEIVER_ADDRESS: privateKeyToAccount(ANVIL_DEPLOYER_PRIVATE_KEY).address,
+      X402_FACILITATOR_URL_OVERRIDE: facilitatorStub.url,
       NEXT_PUBLIC_APP_URL: baseUrl,
       DATABASE_URL: testDatabaseUrl,
       DATABASE_URL_DIRECT: testDirectDatabaseUrl,
@@ -239,7 +255,8 @@ async function main() {
       SQR_E2E_BASE_URL: baseUrl,
       SQR_TEST_RPC_URL: rpcUrl,
       SQR_TEST_CHAIN_ID: "8453",
-      SQR_TEST_MINT_PRIVATE_KEY: ANVIL_DEPLOYER_PRIVATE_KEY
+      SQR_TEST_MINT_PRIVATE_KEY: ANVIL_DEPLOYER_PRIVATE_KEY,
+      SQR_TEST_FACILITATOR_URL: facilitatorStub.url
     };
 
     const exitCode = await runPlaywright(playwrightEnv, process.argv.slice(2));

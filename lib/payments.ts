@@ -35,11 +35,20 @@ export function paymentReceiver(): `0x${string}` {
  * CDP_API_KEY_SECRET in the environment). On testnet we return undefined so the
  * SDK falls back to the free x402.org facilitator (Base Sepolia only).
  *
+ * X402_FACILITATOR_URL_OVERRIDE points the SDK at a local facilitator stub for
+ * hermetic tests (same pattern as SQR_TEST_SOURCE_STUB). It is deliberately
+ * ignored in production so it can never redirect real settlement.
+ *
  * Typed as unknown because @coinbase/x402 ships the v2 FacilitatorConfig type
  * while x402-next@1.x expects the structurally identical legacy type; the
  * single call site casts to the parameter type it needs.
  */
 export function paymentFacilitator(): unknown {
+  const override = process.env.X402_FACILITATOR_URL_OVERRIDE;
+  if (override && config.APP_ENV !== "production") {
+    return { url: override };
+  }
+
   return paymentNetwork() === "base" ? cdpFacilitator : undefined;
 }
 

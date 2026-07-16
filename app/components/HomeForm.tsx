@@ -227,9 +227,13 @@ export default function HomeForm() {
         transport: custom(window.ethereum)
       }).extend(publicActions);
 
+      // x402-fetch defaults maxValue to 0.1 USDC — explicitly allow the offered
+      // price (base units, 6 decimals) or the payment would be rejected client-side.
+      const maxValueMicroUsdc = BigInt(Math.ceil(paidOffer.priceUsdc * 1_000_000));
       const fetchWithPayment = wrapFetchWithPayment(
         fetch,
-        walletClient as Parameters<typeof wrapFetchWithPayment>[1]
+        walletClient as Parameters<typeof wrapFetchWithPayment>[1],
+        maxValueMicroUsdc
       );
 
       const response = await fetchWithPayment(paidOffer.endpoint, {

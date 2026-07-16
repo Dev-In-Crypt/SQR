@@ -90,6 +90,29 @@ export class HttpSession {
     }
   }
 
+  cookie(name: string): string | undefined {
+    return this.cookies.get(name);
+  }
+
+  /**
+   * A fetch-compatible function bound to this session (cookies + spoofed IP),
+   * usable with wrappers like x402-fetch's wrapFetchWithPayment. Absolute and
+   * relative URLs both resolve against the session's base URL host.
+   */
+  fetchLike(): typeof fetch {
+    const sessionFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const raw = typeof input === "string" || input instanceof URL ? String(input) : input.url;
+      const path = raw.startsWith(this.baseUrl) ? raw.slice(this.baseUrl.length) : raw;
+      const mergedInit: RequestInit =
+        typeof input === "object" && !(input instanceof URL)
+          ? { method: input.method, headers: input.headers, body: init?.body ?? (input as Request).body, ...init }
+          : { ...init };
+      return this.request(path, mergedInit);
+    };
+
+    return sessionFetch as typeof fetch;
+  }
+
   async request(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers || {});
 

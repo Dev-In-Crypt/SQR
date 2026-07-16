@@ -30,10 +30,12 @@ import {
   waitForHttp,
   waitForJsonRpc
 } from "../../../scripts/test-runtime";
+import { startFacilitatorStub, type FacilitatorStub } from "./x402-facilitator-stub";
 
 const ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const ANVIL_DEPLOYER_PRIVATE_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
+const ANVIL_DEPLOYER_ADDRESS = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as const;
 
 function withSchema(databaseUrl: string, schema: string): string {
   const parsed = new URL(databaseUrl);
@@ -97,6 +99,7 @@ export default async function integrationGlobalSetup() {
   let anvilProcess: ChildProcess | null = null;
   let nextProcess: ChildProcess | null = null;
   let workerProcess: ChildProcess | null = null;
+  let facilitatorStub: FacilitatorStub | null = null;
 
   const cleanupController = createCleanupController({
     label: "integration",
@@ -104,6 +107,11 @@ export default async function integrationGlobalSetup() {
       await stopProcessTree(workerProcess, "integration:worker");
       await stopProcessTree(nextProcess, "integration:next");
       await stopProcessTree(anvilProcess, "integration:anvil");
+
+      if (facilitatorStub) {
+        await facilitatorStub.stop().catch(() => undefined);
+        facilitatorStub = null;
+      }
 
       const adminDatabaseUrl = withSchema(baseDirectDatabaseUrl, "public");
       const prisma = new PrismaClient({
@@ -200,10 +208,15 @@ export default async function integrationGlobalSetup() {
       throw new Error("Failed to deploy ReceiptRegistry in integration setup");
     }
 
+    facilitatorStub = await startFacilitatorStub();
+
     const appEnv: NodeJS.ProcessEnv = {
       ...process.env,
       NODE_ENV: "test",
       APP_ENV: "local",
+      PAYMENTS_ENABLED: "true",
+      PAYMENT_RECEIVER_ADDRESS: ANVIL_DEPLOYER_ADDRESS,
+      X402_FACILITATOR_URL_OVERRIDE: facilitatorStub.url,
       NEXT_PUBLIC_APP_URL: baseUrl,
       DATABASE_URL: testDatabaseUrl,
       DATABASE_URL_DIRECT: testDirectDatabaseUrl,
@@ -255,6 +268,7 @@ export default async function integrationGlobalSetup() {
     process.env.SQR_TEST_MINT_PRIVATE_KEY = ANVIL_DEPLOYER_PRIVATE_KEY;
     process.env.SQR_TEST_WITH_REDIS = redisRequested ? "1" : "0";
     process.env.SQR_TEST_SOURCE_STUB = "1";
+    process.env.SQR_TEST_FACILITATOR_URL = facilitatorStub.url;
 
     return async () => {
       cleanupController.unregister();
