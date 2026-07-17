@@ -100,16 +100,29 @@ export default function HomePage() {
                     <span className="trust-chip" role="listitem">Deterministic report hash</span>
                     <span className="trust-chip" role="listitem">Optional Base receipt</span>
                   </div>
-                  <div className="hero-memo-preview">
-                    <div className="memo-kicker">Review output</div>
-                    <div className="memo-preview-row">
-                      <strong>Memo-style report</strong>
-                      <span className="badge">Evidence</span>
+                  <div className="hero-memo-preview report-preview" aria-hidden="true">
+                    <div className="report-preview-head">
+                      <span className="memo-kicker">Review memo</span>
+                      <span className="report-preview-status">Done with warnings</span>
                     </div>
-                    <p className="muted">
-                      Findings, severity, ownership controls, and provenance are presented as one coherent review memo
-                      instead of scattered output blocks.
-                    </p>
+                    <ul className="report-preview-list">
+                      <li>
+                        <span className="badge HIGH">High</span>
+                        <span className="report-preview-finding">Reentrancy in withdraw()</span>
+                      </li>
+                      <li>
+                        <span className="badge MEDIUM">Med</span>
+                        <span className="report-preview-finding">Unchecked low-level call return</span>
+                      </li>
+                      <li>
+                        <span className="badge LOW">Low</span>
+                        <span className="report-preview-finding">Timestamp-dependent logic</span>
+                      </li>
+                    </ul>
+                    <div className="report-preview-foot">
+                      <span className="mono-wrap">hash 0x9498…b516</span>
+                      <span className="report-preview-receipt">Receipt on Base</span>
+                    </div>
                   </div>
                 </div>
                 <div className="hero-analyzer">

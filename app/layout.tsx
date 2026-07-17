@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { IBM_Plex_Mono, Manrope, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, Inter, Inter_Tight } from "next/font/google";
 
 import "@/app/globals.css";
 import WalletButton from "@/app/components/WalletButton";
 import MobileNav from "@/app/components/MobileNav";
 import { NAV_LINKS } from "@/lib/nav-links";
 
-const headingFont = Space_Grotesk({
+// Linear-style type: a tight geometric-humanist sans for headings, Inter for
+// body, and IBM Plex Mono kept as the accent for labels/code.
+const headingFont = Inter_Tight({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-heading"
+  variable: "--font-heading",
+  weight: ["500", "600", "700"]
 });
 
-const bodyFont = Manrope({
+const bodyFont = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-body"
