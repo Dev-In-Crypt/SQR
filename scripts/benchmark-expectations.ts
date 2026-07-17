@@ -12,11 +12,16 @@ export interface BenchmarkCase {
   /** Minimum severity for a finding to count (default MEDIUM). */
   minSeverity?: BenchmarkSeverity;
   /**
-   * Known miss for the static-only pipeline (baseline 2026-07-16). A miss on
-   * these cases is reported but does not fail --strict; a NEW detection here
-   * should prompt removing the flag.
+   * Known miss for the static-only pipeline. A miss on these cases is reported
+   * but does not fail --strict; a NEW detection here should prompt removing the flag.
    */
   knownGapStatic?: boolean;
+  /**
+   * Known false positive from an upstream detector (e.g. slither flags an
+   * authorized send it cannot prove is guarded). Reported but does not fail
+   * --strict; silencing the detector would hide real bugs.
+   */
+  knownFpStatic?: boolean;
 }
 
 export const BENCHMARK_CASES: BenchmarkCase[] = [
@@ -43,25 +48,18 @@ export const BENCHMARK_CASES: BenchmarkCase[] = [
     matchers: [/delegatecall/i]
   },
   {
-    // Baseline 2026-07-16: snippet-mode static scan surfaces the low-level call
-    // but not as an "unchecked return" finding >= MEDIUM. Candidate for a
-    // scanner-rule improvement; tracked as a known static gap, not a regression.
     id: "unchecked-call",
     files: ["contracts/benchmark/VulnUncheckedCall.sol"],
     expectVulnerable: true,
     bugClass: "unchecked-low-level-call",
-    matchers: [/unchecked|low-level/i],
-    knownGapStatic: true
+    matchers: [/unchecked|low-level/i]
   },
   {
-    // Baseline 2026-07-16: weak-PRNG heuristic does not fire >= MEDIUM in
-    // snippet mode. Known static gap; the AI stage is expected to cover it.
     id: "weak-randomness",
     files: ["contracts/benchmark/VulnWeakRandom.sol"],
     expectVulnerable: true,
     bugClass: "weak-randomness",
-    matchers: [/weak.?prng|random|timestamp/i],
-    knownGapStatic: true
+    matchers: [/weak.?prng|random|timestamp/i]
   },
   {
     id: "safe-vault",
@@ -122,11 +120,15 @@ export const BENCHMARK_CASES: BenchmarkCase[] = [
     knownGapStatic: true
   },
   {
+    // slither's arbitrary-send-eth fires on `to.call{value}` even though the
+    // send is guarded by a signature + nonce it cannot reason about. Known
+    // upstream FP; silencing the detector would hide real arbitrary-send bugs.
     id: "safe-nonce-wallet",
     files: ["contracts/benchmark2/SafeNonceWallet.sol"],
     expectVulnerable: false,
     bugClass: "signature-replay",
-    matchers: []
+    matchers: [],
+    knownFpStatic: true
   },
   {
     id: "safe-initializable-vault",

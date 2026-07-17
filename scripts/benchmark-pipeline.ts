@@ -23,6 +23,7 @@ interface CaseResult {
   bugClass: string;
   expectVulnerable: boolean;
   knownGapStatic: boolean;
+  knownFpStatic: boolean;
   detected: boolean;
   matchedTitles: string[];
   falsePositiveTitles: string[];
@@ -111,6 +112,7 @@ async function runCase(
     bugClass: benchmarkCase.bugClass,
     expectVulnerable: benchmarkCase.expectVulnerable,
     knownGapStatic: benchmarkCase.knownGapStatic ?? false,
+    knownFpStatic: benchmarkCase.knownFpStatic ?? false,
     detected,
     matchedTitles: [...new Set(matchedTitles)],
     falsePositiveTitles: [...new Set(falsePositiveTitles)],
@@ -151,7 +153,13 @@ async function main() {
     process.stdout.write(`[benchmark] ${benchmarkCase.id} ... `);
     const result = await runCase(benchmarkCase, withAi);
     results.push(result);
-    console.log(result.outcome + (result.knownGapStatic && result.outcome === "FN" ? " (known gap)" : ""));
+    const note =
+      result.knownGapStatic && result.outcome === "FN"
+        ? " (known gap)"
+        : result.knownFpStatic && result.outcome === "FP"
+          ? " (known FP)"
+          : "";
+    console.log(result.outcome + note);
   }
 
   const metrics = computeMetrics(results);
@@ -185,7 +193,8 @@ async function main() {
   if (strict) {
     const regressions = results.filter(
       (result) =>
-        (result.outcome === "FN" && !result.knownGapStatic) || result.outcome === "FP"
+        (result.outcome === "FN" && !result.knownGapStatic) ||
+        (result.outcome === "FP" && !result.knownFpStatic)
     );
     if (regressions.length > 0) {
       console.error(

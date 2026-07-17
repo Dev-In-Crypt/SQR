@@ -16,6 +16,9 @@ const SLITHER_DETECTORS = [
   "reentrancy-eth",
   "reentrancy-no-eth",
   "unchecked-transfer",
+  "unchecked-lowlevel",
+  "unchecked-send",
+  "weak-prng",
   "arbitrary-send-eth",
   "tx-origin",
   "controlled-delegatecall",
@@ -918,10 +921,20 @@ async function runHeuristicScan(sourceBundle: SourceBundle): Promise<Finding[]> 
       fix: "Avoid selfdestruct in production contracts or protect it with strong governance controls."
     },
     {
+      // A whole statement that is just `<expr>.call{value: ...}(...)` with no
+      // assignment on the left drops the returned success flag silently. The
+      // `^\s*[\w.\[\]]+\.call` anchor excludes `(bool ok, ) = x.call{...}(...)`.
+      pattern: /^\s*[\w.\[\]]+\.call\s*\{\s*value\s*:[^}]*\}\s*\([^;]*\)\s*;\s*$/im,
+      title: "Unchecked low-level call return value",
+      severity: "MEDIUM",
+      why: "A low-level call whose success value is ignored lets failures pass silently, which can strand funds or break invariants.",
+      fix: "Capture the returned bool and require it, or use a checked transfer pattern."
+    },
+    {
       pattern: /\.call\s*\{\s*value\s*:/i,
       title: "Low-level value transfer call",
-      severity: "HIGH",
-      why: "Low-level external calls with value can introduce reentrancy and error handling bugs.",
+      severity: "LOW",
+      why: "Low-level external calls with value warrant a checks-effects-interactions review, though they are not unsafe by themselves.",
       fix: "Apply checks-effects-interactions and optionally reentrancy guards before external calls."
     },
     {
@@ -930,6 +943,15 @@ async function runHeuristicScan(sourceBundle: SourceBundle): Promise<Finding[]> 
       severity: "MEDIUM",
       why: "Unchecked arithmetic can overflow/underflow if assumptions are wrong.",
       fix: "Use unchecked only with documented invariants and test boundary conditions."
+    },
+    {
+      // block.timestamp / blockhash / prevrandao fed into keccak or a modulo is
+      // a weak randomness source a validator can influence.
+      pattern: /(keccak256[\s\S]{0,80}(block\.(timestamp|number|prevrandao)|blockhash)|(block\.(timestamp|number|prevrandao)|blockhash)[\s\S]{0,80}%)/i,
+      title: "Weak PRNG from block values",
+      severity: "MEDIUM",
+      why: "Randomness derived from block.timestamp/number/prevrandao/blockhash can be predicted or influenced by validators.",
+      fix: "Use a verifiable randomness source (e.g. a VRF) instead of block values."
     },
     {
       pattern: /block\.timestamp/i,
