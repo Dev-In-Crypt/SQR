@@ -235,7 +235,6 @@ summary:focus-visible {
 /* Mobile hamburger — hidden on desktop, shown at <=620px. Reuses the
    wallet-menu dropdown mechanics (see MobileNav.tsx). */
 .nav-menu-wrap {
-  position: relative;
   display: none;
   z-index: 2;
 }
