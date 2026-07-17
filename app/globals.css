@@ -148,7 +148,7 @@ summary:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: clamp(14px, 1.8vw, 24px);
-  row-gap: 12px;
+  row-gap: 10px;
   margin-bottom: 40px;
   width: min(var(--layout-max), calc(100% - (var(--layout-gutter) * 2)));
   margin-left: auto;
@@ -190,9 +190,14 @@ summary:focus-visible {
   grid-row: 2;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;   /* aligned left under the brand, not floating center */
   gap: clamp(12px, 1.5vw, 20px);
   flex-wrap: wrap;
+  /* Hairline divider separating the nav row from the brand/wallet row so the
+     second tier reads as an intentional section, not a floating strip. */
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+  margin-left: -2px;             /* first pill's padding aligns with the brand text */
 }
 
 .main-nav a {
@@ -1920,7 +1925,15 @@ pre {
   .topbar {
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 12px;
+    column-gap: 10px;
+    row-gap: 0;
+  }
+
+  /* Keep the brand to two lines instead of three in the tight mobile row. */
+  .brand {
+    font-size: 0.82rem;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
   }
 
   .main-nav {
