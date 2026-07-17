@@ -26,10 +26,12 @@
   --shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.32);
   --shadow-card: 0 20px 44px rgba(0, 0, 0, 0.34);
   --shadow-glow: 0 0 0 1px rgba(255, 183, 0, 0.14), 0 8px 22px rgba(255, 183, 0, 0.12);
-  /* Neutral hairline surface — the single default panel treatment (flat). */
-  --surface: #101010;
-  --surface-line: rgba(255, 255, 255, 0.08);
-  --surface-line-strong: rgba(255, 255, 255, 0.12);
+  /* Subtle lift so blocks sit clearly above the near-black page. */
+  --shadow-block: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
+  /* Neutral surface — clearly lighter than --page-bg so cards read as blocks. */
+  --surface: #161513;
+  --surface-line: rgba(255, 255, 255, 0.1);
+  --surface-line-strong: rgba(255, 255, 255, 0.16);
   /* Spacing scale for consistent rhythm. */
   --space-1: 6px;
   --space-2: 10px;
@@ -609,12 +611,12 @@ main > section.stack.page-container {
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: none;
+  box-shadow: var(--shadow-block);
 }
 
 .homepage .info-block:hover {
   border-color: var(--surface-line-strong);
-  background: #141413;
+  background: #1c1a18;
 }
 
 .homepage .features-grid {
@@ -714,6 +716,7 @@ main > section.stack.page-container {
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-block);
   padding: clamp(14px, 1.9vw, 20px) clamp(15px, 2vw, 22px);
   display: grid;
   gap: 9px;
@@ -722,7 +725,7 @@ main > section.stack.page-container {
 
 .homepage .roadmap-panel:hover {
   border-color: var(--surface-line-strong);
-  background: #141413;
+  background: #1c1a18;
 }
 
 .homepage .roadmap-title {
@@ -790,12 +793,13 @@ main > section.stack.page-container {
   border-radius: var(--radius-md);
   padding: 22px;
   background: var(--surface);
+  box-shadow: var(--shadow-block);
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .info-block:hover {
   border-color: var(--surface-line-strong);
-  background: #141413;
+  background: #1c1a18;
 }
 
 .steps {
@@ -821,6 +825,7 @@ main > section.stack.page-container {
   border-radius: var(--radius-md);
   padding: 13px 15px;
   background: var(--surface);
+  box-shadow: var(--shadow-block);
 }
 
 .polished-steps li::before {
@@ -871,6 +876,7 @@ main > section.stack.page-container {
   border-radius: var(--radius-md);
   padding: 14px 16px;
   background: var(--surface);
+  box-shadow: var(--shadow-block);
   transition: border-color 0.2s ease;
 }
 
@@ -1401,6 +1407,7 @@ pre {
   border: 1px solid var(--surface-line);
   border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-block);
 }
 
 .hero-memo-preview,
@@ -1549,6 +1556,7 @@ pre {
   border-radius: var(--radius-md);
   border: 1px solid var(--surface-line);
   background: var(--surface);
+  box-shadow: var(--shadow-block);
 }
 
 .archive-summary-text {
@@ -1630,6 +1638,7 @@ pre {
   border-radius: var(--radius-md);
   border: 1px solid var(--surface-line);
   background: var(--surface);
+  box-shadow: var(--shadow-block);
 }
 
 .overview-value {
