@@ -4,6 +4,8 @@ import { IBM_Plex_Mono, Manrope, Space_Grotesk } from "next/font/google";
 
 import "@/app/globals.css";
 import WalletButton from "@/app/components/WalletButton";
+import MobileNav from "@/app/components/MobileNav";
+import { NAV_LINKS } from "@/lib/nav-links";
 
 const headingFont = Space_Grotesk({
   subsets: ["latin"],
@@ -50,13 +52,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <span className="brand-note">Private review workspace for Solidity risk triage</span>
             </div>
             <nav className="main-nav" aria-label="Primary navigation">
-              <Link href="/#analyze">New Analysis</Link>
-              <Link href="/quick">Quick Scan</Link>
-              <Link href="/#capabilities">Capabilities</Link>
-              <Link href="/#faq">FAQ</Link>
-              <Link href="/#roadmap">Roadmap</Link>
-              <Link href="/history">History</Link>
+              {NAV_LINKS.map((link) => (
+                <Link key={link.href} href={link.href}>
+                  {link.label}
+                </Link>
+              ))}
             </nav>
+            <MobileNav />
             <div className="wallet-slot">
               <WalletButton />
             </div>
