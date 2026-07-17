@@ -138,6 +138,9 @@ summary:focus-visible {
   margin: 0;
   padding: 20px 0 34px;
   position: relative;
+  /* Contain decorative glows (e.g. hero ::before) so they never create a
+     horizontal scrollbar on narrow viewports. */
+  overflow-x: clip;
 }
 
 /* Two-tier header: row 1 = brand (left) + wallet (right); row 2 = nav spanning
