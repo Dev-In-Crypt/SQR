@@ -261,8 +261,8 @@ summary:focus-visible {
   right: 0;
   min-width: 210px;
   border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(180deg, #171614 0%, #0f0f0e 100%);
+  border: 1px solid var(--surface-line-strong);
+  background: #141413;
   box-shadow: var(--shadow-soft);
   padding: 6px;
   display: grid;
@@ -310,8 +310,8 @@ summary:focus-visible {
   right: 0;
   min-width: 180px;
   border-radius: 12px;
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(180deg, #171614 0%, #0f0f0e 100%);
+  border: 1px solid var(--surface-line-strong);
+  background: #141413;
   box-shadow: var(--shadow-soft);
   padding: 6px;
   display: grid;
@@ -525,9 +525,9 @@ main > section.stack.page-container {
 }
 
 .home-wallet-state {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
   padding: 11px 13px;
   gap: 4px;
 }
@@ -817,10 +817,10 @@ main > section.stack.page-container {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 14px;
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-md);
   padding: 13px 15px;
-  background: linear-gradient(180deg, rgba(20, 20, 18, 0.94) 0%, rgba(12, 12, 11, 0.98) 100%);
+  background: var(--surface);
 }
 
 .polished-steps li::before {
@@ -1120,7 +1120,7 @@ main > section.stack.page-container {
 
 .card.error {
   border-color: rgba(255, 108, 95, 0.44);
-  background: linear-gradient(180deg, rgba(46, 19, 16, 0.9) 0%, rgba(24, 12, 11, 0.96) 100%);
+  background: #1a0f0e;
 }
 
 .row {
@@ -1132,7 +1132,7 @@ main > section.stack.page-container {
 
 .divider {
   border: 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid var(--surface-line);
   margin: 10px 0;
 }
 
@@ -1150,7 +1150,7 @@ main > section.stack.page-container {
 }
 
 .scanner-summary-list li::marker {
-  color: rgba(255, 183, 0, 0.82);
+  color: var(--muted);
 }
 
 .progress-list {
@@ -1159,9 +1159,9 @@ main > section.stack.page-container {
 
 .progress-phase {
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
 
 .progress-phase.done {
@@ -1235,11 +1235,11 @@ pre {
 
 pre {
   margin: 0;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: linear-gradient(180deg, #0e0e0d 0%, #0a0a09 100%);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-line);
+  background: #0b0b0a;
   color: #f4f3ed;
-  padding: 10px;
+  padding: 12px;
   overflow: auto;
 }
 
