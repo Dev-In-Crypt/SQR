@@ -202,15 +202,13 @@ export default function HomePage() {
             <div className="stack section-card section-frame">
               <div className="section-eyebrow">Reference</div>
               <h2>FAQ</h2>
-              <div className="truth-grid">
-                {pinnedTruths.map((item) => (
-                  <article className="truth-card stack" key={item.question}>
-                    <h3>{item.question}</h3>
-                    <p className="muted">{item.answer}</p>
-                  </article>
-                ))}
-              </div>
               <div className="stack faq-list">
+                {pinnedTruths.map((item) => (
+                  <details className="faq-item" key={item.question}>
+                    <summary>{item.question}</summary>
+                    <p className="muted">{item.answer}</p>
+                  </details>
+                ))}
                 <details className="faq-item">
                   <summary>Who is this for?</summary>
                   <p className="muted">
