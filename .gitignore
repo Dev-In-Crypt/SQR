@@ -88,11 +88,6 @@ prompts/
 
 # Local-only infra and tooling configs
 docker-compose.yml
-foundry.toml
-middleware.ts
-tsconfig.json
-vitest.integration.config.ts
-slither.config.json
 
 # Local generated/debug artifacts
 benchmark2-slither.json
