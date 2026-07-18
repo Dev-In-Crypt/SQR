@@ -5,5 +5,5 @@ export * from "../../scanner";
 export * from "../../report";
 export * from "../../llm";
 export * from "../../partial-reasons";
-export * from "../../prompts";
+export * from "../../prompt-provider";
 export * from "../../pipeline/process-analysis";
