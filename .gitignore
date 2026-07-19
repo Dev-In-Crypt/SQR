@@ -88,6 +88,10 @@ prompts/
 
 # Local-only infra and tooling configs
 docker-compose.yml
+# Slither config + its local triage database (slither.db.json) are a local pair;
+# committing the config without the triage db turns the CI gate red on the
+# intentionally-vulnerable benchmark fixtures.
+slither.config.json
 
 # Local generated/debug artifacts
 demo_video_SQR.mp4
