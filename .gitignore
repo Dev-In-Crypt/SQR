@@ -92,6 +92,10 @@ docker-compose.yml
 # committing the config without the triage db turns the CI gate red on the
 # intentionally-vulnerable benchmark fixtures.
 slither.config.json
+# foundry.toml must stay local: committing it makes the Slither CI action detect
+# a Foundry project and compile+scan the intentionally-vulnerable benchmark
+# fixtures, turning the security gate red. Kept local like the Slither triage db.
+foundry.toml
 
 # Local generated/debug artifacts
 demo_video_SQR.mp4
