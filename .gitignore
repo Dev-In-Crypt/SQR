@@ -90,6 +90,8 @@ prompts/
 docker-compose.yml
 
 # Local generated/debug artifacts
+demo_video_SQR.mp4
+*.mp4
 benchmark2-slither.json
 output/benchmark2-combined-report.json
 output/benchmark2-combined-report.md
