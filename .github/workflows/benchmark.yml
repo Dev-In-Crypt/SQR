@@ -1,0 +1,56 @@
+name: Benchmark
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Detection-quality benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ENABLE_SLITHER: "true"
+      # Detection quality is driven by Slither; the Foundry compile check is not
+      # the subject of the benchmark, so keep it off to avoid a Foundry dependency.
+      ENABLE_FOUNDRY_CHECK: "false"
+      ENABLE_SOLC_AUTO_RESOLVE: "true"
+      SOLC_VERSION_MANAGER: "solc-select"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Slither and solc-select
+        run: |
+          python -m pip install --upgrade pip
+          # Pin Slither to match the version the baseline was recorded with so
+          # --strict does not flap on detector differences across versions.
+          pip install slither-analyzer==0.11.5 solc-select
+          solc-select install 0.8.24
+          solc-select use 0.8.24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run detection-quality benchmark (strict)
+        run: npm run benchmark:pipeline -- --strict
