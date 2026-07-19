@@ -1,7 +1,7 @@
-﻿import { readFile, writeFile } from "node:fs/promises";
+﻿import { access, readFile, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { config } from "@/lib/config";
 import { runStaticScan, type ScannerRuntime } from "@/lib/scanner";
@@ -61,6 +61,28 @@ function makeSourceBundle(params: {
 }
 
 describe("scanner runtime modes", () => {
+  // The foundry-root detection test needs a foundry.toml at the repo root.
+  // foundry.toml is gitignored (its presence makes the Slither CI scan the
+  // benchmark fixtures), so create a minimal one when absent (e.g. in CI) and
+  // remove it afterwards. Locally the real file exists and is left untouched.
+  const foundryTomlPath = resolve(process.cwd(), "foundry.toml");
+  let createdFoundryToml = false;
+
+  beforeAll(async () => {
+    try {
+      await access(foundryTomlPath);
+    } catch {
+      await writeFile(foundryTomlPath, '[profile.default]\nsrc = "contracts"\n', "utf8");
+      createdFoundryToml = true;
+    }
+  });
+
+  afterAll(async () => {
+    if (createdFoundryToml) {
+      await unlink(foundryTomlPath).catch(() => undefined);
+    }
+  });
+
   const originalSolcPath = config.SOLC_PATH;
   const originalEnableAutoResolve = config.ENABLE_SOLC_AUTO_RESOLVE;
   const originalSolcVersionManager = config.SOLC_VERSION_MANAGER;
