@@ -46,6 +46,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${headingFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <div className="app-shell">
           <header className="topbar">
             <div className="brand-block">
@@ -66,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <WalletButton />
             </div>
           </header>
-          <main>{children}</main>
+          <main id="main-content">{children}</main>
           <footer className="footer">
             <div className="footer-items">
               <span className="footer-item">Solidity Quick Review</span>

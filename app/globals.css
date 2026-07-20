@@ -18,7 +18,9 @@
   --danger: #ff6c5f;
   --danger-bg: rgba(255, 108, 95, 0.12);
   --success: #9ecf31;
-  --focus-ring: rgba(255, 183, 0, 0.38);
+  /* Solid, not translucent: a 38%-alpha ring measured ~2.4:1 against the page,
+     below the 3:1 required by WCAG 1.4.11 for focus indicators. */
+  --focus-ring: #ffb700;
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
@@ -135,6 +137,27 @@ summary:focus-visible {
   display: none !important;
 }
 
+/* WCAG 2.4.1 Bypass Blocks — visible only when focused. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: #181400;
+  font-family: var(--font-mono), "Consolas", monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  left: 12px;
+  top: 12px;
+  color: #181400;
+}
+
 .app-shell {
   width: 100%;
   margin: 0;
@@ -235,10 +258,12 @@ summary:focus-visible {
   display: inline-flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   gap: 4px;
-  width: 42px;
-  height: 38px;
-  padding: 0 11px;
+  /* >= 44x44 touch target (WCAG 2.5.5) */
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-pill);
   background: transparent;
@@ -272,6 +297,10 @@ summary:focus-visible {
 }
 
 .nav-menu-item {
+  display: flex;
+  align-items: center;
+  /* Mobile menu entries are touch targets (WCAG 2.5.5) */
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -887,6 +916,9 @@ main > section.stack.page-container {
   gap: 12px;
   cursor: pointer;
   font-weight: 700;
+  /* Comfortable touch target for the accordion toggle (WCAG 2.5.5) */
+  min-height: 44px;
+  padding-block: 4px;
 }
 
 .faq-item summary::-webkit-details-marker {
@@ -946,6 +978,12 @@ main > section.stack.page-container {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
+}
+
+/* Links in the footer get a full-height hit area (WCAG 2.5.5) */
+a.footer-item {
+  min-height: 44px;
+  padding-inline: 2px;
 }
 
 .footer a {
@@ -1288,13 +1326,14 @@ pre {
   text-transform: uppercase;
 }
 
-/* Eyebrows are muted labels, not a second amber accent. */
+/* Eyebrows are muted labels, not a second amber accent. Light enough to clear
+   4.5:1 (WCAG 1.4.3) on the lightest surface they sit on (--surface). */
 .brand-note,
 .page-meta,
 .meta-label,
 .section-eyebrow,
 .memo-kicker {
-  color: #7d7c74;
+  color: #8f8e85;
 }
 
 .page-hero-card,
