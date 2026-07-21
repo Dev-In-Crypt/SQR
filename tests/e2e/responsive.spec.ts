@@ -116,3 +116,45 @@ test.describe("header behavior", () => {
     await expect(page).toHaveURL(/\/quick$/);
   });
 });
+
+// WCAG 1.4.10 Reflow / 1.4.4 Resize text. Browser zoom scales CSS pixels, so
+// zooming a 1280px window to 200% makes media queries see 640px, and to 400%
+// makes them see 320px (the reflow floor). Emulate by narrowing the viewport —
+// this triggers the same responsive layout the real zoom would.
+test.describe("zoom reflow (WCAG 1.4.10 / 1.4.4)", () => {
+  const ZOOMS = [
+    { name: "200% (1280 desktop)", width: 640, height: 900 },
+    { name: "400% reflow floor", width: 320, height: 800 }
+  ] as const;
+
+  for (const z of ZOOMS) {
+    test.describe(z.name, () => {
+      test.use({ viewport: { width: z.width, height: z.height } });
+
+      for (const p of PAGES) {
+        test(`${p.id} — reflows without horizontal scroll`, async ({ page }) => {
+          await page.goto(p.path, { waitUntil: "networkidle" });
+
+          const { overflow, scrollW, innerW } = await hasHorizontalOverflow(page);
+          expect(
+            overflow,
+            `horizontal scroll at ${z.name} on ${p.path}: scrollWidth ${scrollW} > innerWidth ${innerW}`
+          ).toBe(false);
+
+          // No loss of content: the page heading and a way into the nav remain.
+          await expect(page.locator("h1").first()).toBeVisible();
+          const navReachable = await page.evaluate(() => {
+            const nav = document.querySelector(".main-nav");
+            const toggle = document.querySelector(".nav-toggle");
+            const navVisible = nav ? getComputedStyle(nav).display !== "none" : false;
+            const toggleVisible = toggle
+              ? getComputedStyle(toggle.closest(".nav-menu-wrap") as Element).display !== "none"
+              : false;
+            return navVisible || toggleVisible;
+          });
+          expect(navReachable, `navigation not reachable at ${z.name} on ${p.path}`).toBe(true);
+        });
+      }
+    });
+  }
+});
