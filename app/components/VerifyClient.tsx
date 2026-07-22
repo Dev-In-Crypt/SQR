@@ -73,8 +73,19 @@ export default function VerifyClient({ initialHash }: { initialHash: string | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const verifyAnnouncement = loading
+    ? "Checking the hash against the onchain registry."
+    : result
+      ? result.verified && result.onchain.exists
+        ? "Receipt found onchain for this hash."
+        : "No onchain receipt found for this hash."
+      : "";
+
   return (
     <div className="stack">
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {verifyAnnouncement}
+      </div>
       <form
         className="card stack"
         onSubmit={(event) => {
@@ -103,7 +114,7 @@ export default function VerifyClient({ initialHash }: { initialHash: string | nu
         </p>
       </form>
 
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <p className="error" role="alert">{error}</p> : null}
 
       {result ? (
         result.verified && result.onchain.exists ? (

@@ -161,6 +161,20 @@ summary:focus-visible {
   color: #181400;
 }
 
+/* Visually hidden but exposed to assistive tech — used for polite live regions
+   that announce async status/progress without cluttering the visual layout. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app-shell {
   width: 100%;
   margin: 0;

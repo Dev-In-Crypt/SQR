@@ -337,7 +337,11 @@ export default function HomeForm() {
               }}
               spellCheck={false}
             />
-            {showSnippetWarning ? <span className="error">{INCOMPLETE_SNIPPET_ERROR}</span> : null}
+            {showSnippetWarning ? (
+              <span className="error" role="alert">
+                {INCOMPLETE_SNIPPET_ERROR}
+              </span>
+            ) : null}
           </label>
         ) : (
           <div className="stack home-input-group">
@@ -364,7 +368,11 @@ export default function HomeForm() {
                 }}
               />
             </label>
-            {showAddressWarning ? <span className="error">{INVALID_ADDRESS_WARNING}</span> : null}
+            {showAddressWarning ? (
+              <span className="error" role="alert">
+                {INVALID_ADDRESS_WARNING}
+              </span>
+            ) : null}
           </div>
         )}
       </div>

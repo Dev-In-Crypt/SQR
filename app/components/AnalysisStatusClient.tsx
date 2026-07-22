@@ -256,12 +256,50 @@ export default function AnalysisStatusClient({ analysisId }: { analysisId: strin
     return "Analysis pipeline completed.";
   }, [data]);
 
+  // One concise line per meaningful state change, announced politely to screen
+  // readers. Sighted users track the spinner/phase list; this gives non-visual
+  // users the same "what is happening now" without re-reading the whole card.
+  // Transient polling/network errors are surfaced separately via role="alert".
+  const liveAnnouncement = useMemo(() => {
+    if (error) {
+      return "";
+    }
+    if (!data) {
+      return "Loading analysis status.";
+    }
+    if (data.status === "QUEUED") {
+      return "Analysis queued. Preparing source.";
+    }
+    if (data.status === "RUNNING") {
+      const phase = ANALYSIS_PHASES[phaseState.activeIndex];
+      return `Stage ${phaseState.activeIndex + 1} of ${ANALYSIS_PHASES.length}: ${phase}.`;
+    }
+    if (data.status === "FAILED") {
+      return analysisErrorDetails
+        ? `Analysis failed: ${analysisErrorDetails.title}.`
+        : "Analysis failed before the report was generated.";
+    }
+    if (data.status === "COMPLETED") {
+      return "Analysis complete. Report ready.";
+    }
+    if (data.status === "DONE_WITH_WARNINGS") {
+      return "Analysis complete with warnings. Report ready.";
+    }
+    if (data.status === "PARTIAL") {
+      return "Analysis partially complete. Report ready.";
+    }
+    return "";
+  }, [error, data, phaseState.activeIndex, analysisErrorDetails]);
+
   return (
     <div className="card stack status-card">
-      {!data && !error ? <div role="status" aria-live="polite">Loading status...</div> : null}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
+      {!data && !error ? <div>Loading status...</div> : null}
       {data ? (
         <>
-          <div className={`status-hero tone-${statusTone(data.status)}`} aria-live="polite">
+          <div className={`status-hero tone-${statusTone(data.status)}`}>
             <div className="status-hero-copy stack">
               <div className="row status-hero-row">
                 <span className="section-eyebrow">Current State</span>
