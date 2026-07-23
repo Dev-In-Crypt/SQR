@@ -24,7 +24,18 @@ function pasteCase(id: string): string {
   return found.payload;
 }
 
+// Each anonymous submission gets its own client IP (same pattern as
+// paid.x402.spec.ts): the anon free limit is 3/day per IP, and the receipt
+// tests in this file perform five sequential anonymous submissions — sharing
+// one IP would flip the fifth into the paid-offer panel instead of navigating.
+let nextClientIpOctet = 1;
+function uniqueClientIp(): string {
+  nextClientIpOctet += 1;
+  return `198.51.100.${nextClientIpOctet}`;
+}
+
 async function createReport(page: import("@playwright/test").Page): Promise<{ reportId: string }> {
+  await page.setExtraHTTPHeaders({ "x-forwarded-for": uniqueClientIp() });
   await page.goto("/");
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();

@@ -227,6 +227,11 @@ export default async function integrationGlobalSetup() {
       BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: receiptContractAddress,
       ENABLE_SLITHER: "true",
+      // Mirror production: the server does not have forge installed, so the
+      // pipeline's foundry compile check never runs there. With it enabled the
+      // status semantics shift (scanner failure + foundry failure => PARTIAL
+      // instead of the warning-only DONE_WITH_WARNINGS these tests encode).
+      ENABLE_FOUNDRY_CHECK: "false",
       SQR_TEST_SOURCE_STUB: "1",
       SQR_TEST_BASESCAN_MAX_ATTEMPTS: "3",
       SQR_TEST_BASESCAN_TOTAL_TIMEOUT_MS: "1500",
