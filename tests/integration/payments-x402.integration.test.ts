@@ -66,11 +66,21 @@ function paidPayloadInit(code: string): RequestInit {
   };
 }
 
-async function sessionId(session: HttpSession): Promise<string> {
-  await session.getJson("/api/v1/session");
-  const value = session.cookie(SESSION_COOKIE);
-  expect(value).toBeTruthy();
-  return value!;
+async function sessionId(
+  session: HttpSession,
+  prisma: ReturnType<typeof prismaForTests>
+): Promise<string> {
+  // Session reads are read-only and never mint (lib/session.ts), so create the
+  // session row directly and seed its cookie, as a state-changing route would.
+  const sid = crypto.randomUUID();
+  await prisma.session.create({
+    data: {
+      sessionId: sid,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    }
+  });
+  session.setCookie(SESSION_COOKIE, sid);
+  return sid;
 }
 
 describe("API integration - x402 paid analyses", () => {
@@ -184,7 +194,7 @@ describe("API integration - x402 paid analyses", () => {
 
   it("consumes an available retry credit instead of charging again", async () => {
     const session = createSession({ ip: "203.0.113.63" });
-    const sid = await sessionId(session);
+    const sid = await sessionId(session, prisma);
     const payer = privateKeyToAccount(generatePrivateKey()).address.toLowerCase();
 
     const credit = await prisma.payment.create({

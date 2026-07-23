@@ -95,6 +95,15 @@ export class HttpSession {
   }
 
   /**
+   * Seed a cookie directly into the jar — for tests that need a known session
+   * id without going through a state-changing route (session reads are
+   * read-only and never mint, see lib/session.ts).
+   */
+  setCookie(name: string, value: string): void {
+    this.cookies.set(name, value);
+  }
+
+  /**
    * A fetch-compatible function bound to this session (cookies + spoofed IP),
    * usable with wrappers like x402-fetch's wrapFetchWithPayment. Absolute and
    * relative URLs both resolve against the session's base URL host.
