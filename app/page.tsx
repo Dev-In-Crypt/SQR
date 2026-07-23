@@ -46,11 +46,11 @@ const roadmapGroups = [
   {
     title: "Shipped",
     items: [
-      "Private reports with owner-scoped access control",
-      "Public and private visibility controls",
-      "Private share links for controlled external review",
-      "Deterministic report hashes and optional Base receipts",
-      "Snippet and verified Base contract analysis"
+      "Deterministic report hashes with optional Base receipts",
+      "Public receipt verification — check any report hash onchain, no access to contents",
+      "Private reports with owner-scoped access control and share links",
+      "Snippet and verified Base contract analysis",
+      "Report export (Markdown / print to PDF)"
     ]
   },
   {
@@ -64,17 +64,17 @@ const roadmapGroups = [
   {
     title: "Next",
     items: [
-      "GitHub and CI-triggered review workflows",
-      "Batch analysis for multiple contracts in one session",
-      "Gas optimization insights alongside security findings"
+      "GitHub Action: a provenance-anchored review report on every pull request and release",
+      "Multi-tool static analysis behind one verifiable report",
+      "Model-consensus confidence scoring on AI review findings"
     ]
   },
   {
     title: "Exploration",
     items: [
-      "Multi-chain expansion beyond the current Base-focused production workflow",
-      "Repository-level review surfaces",
-      "Team review and collaboration workflows"
+      "Deploy-drift monitoring: flag when live bytecode diverges from the reviewed report",
+      "Scan-to-scan diff: what changed and whether risk increased since last review",
+      "Public reproducible detection benchmark on paired vulnerable/safe contracts"
     ]
   }
 ] as const;
