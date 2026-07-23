@@ -25,7 +25,7 @@ async function createReport(page: import("@playwright/test").Page): Promise<{
   reportId: string;
   reportHash: `0x${string}`;
 }> {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();
 

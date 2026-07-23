@@ -56,6 +56,8 @@ The product is Base-only by design. Receipt anchoring uses the ReceiptRegistry c
 
 ## Continuous integration
 - `.github/workflows/ci.yml` — typecheck, lint, and unit tests on every push and PR.
+- `.github/workflows/benchmark.yml` — detection-quality benchmark gate (`benchmark:pipeline --strict`) with pinned Slither/solc.
+- `.github/workflows/integration-e2e.yml` — integration tests (API + pipeline against ephemeral Postgres/anvil) and Playwright E2E (payment flow, responsive, zoom reflow) using the repo's hermetic test harnesses.
 - `.github/workflows/slither.yml` — Slither security gate on the production contract.
 
 ## Local setup notes

@@ -232,6 +232,9 @@ async function main() {
       BASE_SEPOLIA_RPC_URL: rpcUrl,
       RECEIPT_CONTRACT_ADDRESS: deployReceipt.contractAddress,
       ENABLE_SLITHER: "true",
+      // Mirror production: no forge on the server, so the foundry compile check
+      // is disabled there. Keeps analysis status semantics deterministic.
+      ENABLE_FOUNDRY_CHECK: "false",
       OPENAI_API_KEY: "",
       REDIS_URL: "",
       SQR_NEXT_DIST_DIR: runScopedDistDir,
