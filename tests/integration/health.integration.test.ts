@@ -8,6 +8,10 @@ describe("API integration - health readiness", () => {
 
     const response = await session.getJson<{
       ok?: boolean;
+      database?: {
+        ok?: boolean;
+        code?: string;
+      };
       queue?: {
         enabled?: boolean;
         mode?: "inline" | "redis";
@@ -23,6 +27,9 @@ describe("API integration - health readiness", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
+
+    // Every user-facing flow depends on Postgres; health must probe it.
+    expect(response.body.database?.ok).toBe(true);
 
     // Integration setup deploys a live ReceiptRegistry on the local chain, so
     // the receipt subsystem probe must pass against it.
