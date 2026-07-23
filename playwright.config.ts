@@ -6,7 +6,11 @@ export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // CI retries paper over dev-mode timing races (anon session creation, see
+  // repo task on concurrent /api/v1/session) without hiding them: retried
+  // tests are reported as "flaky" in the Playwright report, hard failures
+  // still fail the job.
+  retries: process.env.CI ? 2 : 0,
   timeout: 180_000,
   expect: {
     timeout: 20_000
