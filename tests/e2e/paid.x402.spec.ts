@@ -87,14 +87,14 @@ test("paid x402 flow: free limit exhausted -> pay panel -> gasless payment -> an
 
   // Warm up all routes first so dev-mode recompiles (which reset the in-memory
   // rate-limit counters) happen before we start consuming the free budget.
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
 
   // Exhaust the anonymous free limit (RATE_LIMIT_ANON_PER_DAY defaults to 3).
   // Dev-mode module reloads can reset the in-memory counters, so keep
   // submitting via the UI until the paid offer actually appears.
   let paidOfferShown = false;
   for (let attempt = 0; attempt < 8 && !paidOfferShown; attempt += 1) {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "networkidle" });
     await page.getByLabel("Solidity snippet (max 200 lines)").fill(uniqueSnippet(`Try${attempt}`));
     await page.getByRole("button", { name: "Analyze" }).click();
 

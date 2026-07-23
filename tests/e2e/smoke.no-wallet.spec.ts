@@ -22,7 +22,7 @@ const INCOMPLETE_SNIPPET = [
 ].join("\n");
 
 async function createReportViaUi(page: import("@playwright/test").Page): Promise<string> {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
 
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();
@@ -130,7 +130,7 @@ test("suite A smoke: paste -> private link -> publish/unpublish -> filter/expand
 });
 
 test("suite A smoke: incomplete snippet is blocked in UI", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
 
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(INCOMPLETE_SNIPPET);
 

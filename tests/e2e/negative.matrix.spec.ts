@@ -36,7 +36,7 @@ function uniqueClientIp(): string {
 
 async function createReport(page: import("@playwright/test").Page): Promise<{ reportId: string }> {
   await page.setExtraHTTPHeaders({ "x-forwarded-for": uniqueClientIp() });
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();
 
@@ -257,7 +257,7 @@ const blockedCaseIds = [
 
 for (const caseId of blockedCaseIds) {
   test(`negative UI paste: ${caseId} stays blocked`, async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "networkidle" });
     await page.getByLabel("Solidity snippet (max 200 lines)").fill(pasteCase(caseId));
 
     if (caseId !== "PASTE_003_EMPTY" && caseId !== "PASTE_004_WHITESPACE_ONLY") {
@@ -271,7 +271,7 @@ for (const caseId of blockedCaseIds) {
 }
 
 test("negative UI paste: over-limit input is rejected with clear message", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(pasteCase("PASTE_016_LINE_LIMIT_EXCEEDED"));
 
   const analyzeButton = page.getByRole("button", { name: "Analyze" });

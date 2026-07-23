@@ -47,7 +47,7 @@ interface MintAuthorizationRpcTypedData {
 async function createReport(page: import("@playwright/test").Page): Promise<{
   reportId: string;
 }> {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
   await page.getByLabel("Solidity snippet (max 200 lines)").fill(RISKY_SNIPPET);
   await page.getByRole("button", { name: "Analyze" }).click();
 
