@@ -302,7 +302,12 @@ test("suite B smoke: wrong wallet network triggers switch and mint succeeds", as
 
   await page.getByRole("button", { name: "Mint Base receipt" }).click();
 
-  await expect(page.getByRole("heading", { name: "Onchain Receipt" })).toBeVisible();
+  // The "Onchain Receipt" heading is always present on the report page, so it
+  // is not a completion signal. The mint flow is async (config fetch → chain
+  // switch → EIP-712 sign → tx → confirm); wait for its observable outcome —
+  // the pending placeholder being replaced by receipt details — before
+  // sampling the mock wallet state.
+  await expect(page.getByText("No receipt is attached yet")).toHaveCount(0, { timeout: 60_000 });
 
   const walletState = await page.evaluate(() => {
     const state = (window as any).__mockWalletState as {
