@@ -59,6 +59,17 @@ The product is Base-only by design. Receipt anchoring uses the ReceiptRegistry c
 - `.github/workflows/benchmark.yml` — detection-quality benchmark gate (`benchmark:pipeline --strict`) with pinned Slither/solc.
 - `.github/workflows/integration-e2e.yml` — integration tests (API + pipeline against ephemeral Postgres/anvil) and Playwright E2E (payment flow, responsive, zoom reflow) using the repo's hermetic test harnesses.
 - `.github/workflows/slither.yml` — Slither security gate on the production contract.
+- `.github/workflows/sqr-self-review.yml` — dogfoods the review action against our own deployed ReceiptRegistry.
+
+## GitHub Action — provenance-anchored review in CI
+`action/` is a composite GitHub Action that runs a Solidity review in any repo's CI and posts findings plus a deterministic, onchain-verifiable report hash to the pull request. It reviews a deployed **verified** Base contract by address, or a single self-contained `.sol` file. See `action/README.md`.
+
+```yaml
+- uses: Dev-In-Crypt/SQR/action@main
+  with:
+    contract-address: "0xYourVerifiedBaseContract"
+    fail-on: high
+```
 
 ## Local setup notes
 A few config files are **intentionally gitignored** and must exist locally for the full toolchain, but are kept out of the repo on purpose:
