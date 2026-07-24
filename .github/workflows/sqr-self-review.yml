@@ -1,0 +1,32 @@
+name: SQR Self-Review
+
+# Dogfood + demo for the SQR Solidity Review action. Reviews our own deployed,
+# verified ReceiptRegistry on Base and (on PRs touching the action) posts the
+# provenance comment to the PR — proving the whole flow end to end.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+  pull_request:
+    paths:
+      - "action/**"
+      - ".github/workflows/sqr-self-review.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Review deployed ReceiptRegistry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: SQR review (deployed Base contract)
+        uses: ./action
+        with:
+          contract-address: "0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B"
+          chain-id: "8453"
+          fail-on: "none"

@@ -1,0 +1,68 @@
+name: "SQR Solidity Review"
+description: "Provenance-anchored Solidity security review in CI — posts findings plus a deterministic, onchain-verifiable report hash to your pull request."
+author: "Solidity Quick Review"
+branding:
+  icon: "shield"
+  color: "orange"
+
+inputs:
+  contract-address:
+    description: "Deployed, verified Base contract address to review. Mutually exclusive with 'file'."
+    required: false
+    default: ""
+  file:
+    description: "Path to a single self-contained Solidity file (max 200 lines) to review. Mutually exclusive with 'contract-address'."
+    required: false
+    default: ""
+  chain-id:
+    description: "Base chain id: 8453 (mainnet, default) or 84532 (Sepolia)."
+    required: false
+    default: "8453"
+  fail-on:
+    description: "Fail the check when top severity is at or above this level: none | low | medium | high | critical. Default none (informational)."
+    required: false
+    default: "none"
+  comment:
+    description: "Post or update a PR comment with the results. Requires 'pull-requests: write' permission."
+    required: false
+    default: "true"
+  api-url:
+    description: "SQR API base URL."
+    required: false
+    default: "https://solidity-scan.com"
+  github-token:
+    description: "Token used to post the PR comment."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  status:
+    description: "Terminal analysis status (COMPLETED | DONE_WITH_WARNINGS | PARTIAL | FAILED)."
+    value: ${{ steps.review.outputs.status }}
+  report-id:
+    description: "Identifier of the generated report."
+    value: ${{ steps.review.outputs.report-id }}
+  report-hash:
+    description: "Deterministic keccak256 report hash — the provenance anchor."
+    value: ${{ steps.review.outputs.report-hash }}
+  top-severity:
+    description: "Highest finding severity in the report."
+    value: ${{ steps.review.outputs.top-severity }}
+  verify-url:
+    description: "Public URL to verify the report hash onchain."
+    value: ${{ steps.review.outputs.verify-url }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: review
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/sqr-review.sh"
+      env:
+        SQR_CONTRACT_ADDRESS: ${{ inputs.contract-address }}
+        SQR_FILE: ${{ inputs.file }}
+        SQR_CHAIN_ID: ${{ inputs.chain-id }}
+        SQR_FAIL_ON: ${{ inputs.fail-on }}
+        SQR_COMMENT: ${{ inputs.comment }}
+        SQR_API_URL: ${{ inputs.api-url }}
+        GH_TOKEN: ${{ inputs.github-token }}

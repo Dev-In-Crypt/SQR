@@ -1,0 +1,3 @@
+# The action entrypoint runs on Linux runners; CRLF would break the shebang/parse.
+*.sh text eol=lf
+action/sqr-review.sh text eol=lf
