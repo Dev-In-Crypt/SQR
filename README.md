@@ -69,7 +69,12 @@ The product is Base-only by design. Receipt anchoring uses the ReceiptRegistry c
   with:
     contract-address: "0xYourVerifiedBaseContract"
     fail-on: high
+    # optional: anchor the report hash onchain so /verify shows it anchored
+    mint-key: ${{ secrets.SQR_MINT_KEY }}
+    rpc-url: ${{ secrets.BASE_RPC_URL }}
 ```
+
+Onchain anchoring (`mint-key` + `rpc-url`) is opt-in; the hermetic mint path is tested in `action-mint-test.yml` against a local anvil.
 
 ## Local setup notes
 A few config files are **intentionally gitignored** and must exist locally for the full toolchain, but are kept out of the repo on purpose:

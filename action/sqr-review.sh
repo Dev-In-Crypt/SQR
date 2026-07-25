@@ -137,7 +137,43 @@ REPORT="$(curl -sS -b "$COOKIES" "$API/api/v1/report/$REPORT_ID?token=$TOKEN")" 
 REPORT_HASH="$(printf '%s' "$REPORT" | jq -r '.reportHash // empty')"
 TOP_SEVERITY="$(printf '%s' "$REPORT" | jq -r '.topSeverity // "INFO"')"
 ANALYZER_VERSION="$(printf '%s' "$REPORT" | jq -r '.report.metadata.analyzerVersion // "unknown"')"
+REPORT_CONTRACT="$(printf '%s' "$REPORT" | jq -r '.report.metadata.contractAddress // "0x0000000000000000000000000000000000000000"')"
 VERIFY_URL="$API/verify?hash=$REPORT_HASH"
+
+# --- optional onchain anchor (mint a Base receipt from CI) ------------------
+ANCHOR_LINE=""
+if [[ -n "${SQR_MINT_KEY:-}" ]]; then
+  if [[ -z "${SQR_RPC_URL:-}" ]]; then
+    err "mint-key was provided but rpc-url is empty — cannot anchor onchain."
+  else
+    note "Anchoring report hash onchain…"
+    if MINT_JSON="$(SQR_REGISTRY="${SQR_REGISTRY:-0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B}" \
+        MINT_REPORT_HASH="$REPORT_HASH" MINT_CONTRACT_ADDRESS="$REPORT_CONTRACT" \
+        MINT_ANALYZER_VERSION="$ANALYZER_VERSION" \
+        bash "$(dirname "$0")/sqr-mint.sh")"; then
+      RECEIPT_ID="$(printf '%s' "$MINT_JSON" | jq -r '.receiptId // empty')"
+      RECEIPT_TX="$(printf '%s' "$MINT_JSON" | jq -r '.txHash // empty')"
+      ALREADY="$(printf '%s' "$MINT_JSON" | jq -r '.alreadyAnchored // false')"
+      MINT_CHAIN="$(cast chain-id --rpc-url "$SQR_RPC_URL" 2>/dev/null || echo "$CHAIN_ID")"
+      case "$MINT_CHAIN" in
+        84532) EXPLORER="https://sepolia.basescan.org/tx/" ;;
+        *) EXPLORER="https://basescan.org/tx/" ;;
+      esac
+      if [[ "$ALREADY" == "true" ]]; then
+        ANCHOR_LINE="- **Receipt on Base:** already anchored (receipt #$RECEIPT_ID) ✓"
+      else
+        ANCHOR_LINE="- **Receipt on Base:** anchored (receipt #$RECEIPT_ID) — [tx]($EXPLORER$RECEIPT_TX) ✓"
+      fi
+      set_out receipt-id "$RECEIPT_ID"
+      set_out receipt-tx "$RECEIPT_TX"
+      set_out anchored "true"
+      note "Anchored onchain: receipt #$RECEIPT_ID"
+    else
+      err "Onchain anchoring failed; continuing with the deterministic hash only."
+      set_out anchored "false"
+    fi
+  fi
+fi
 
 # Severity counts + a compact findings table.
 COUNTS="$(printf '%s' "$REPORT" | jq -r '
@@ -161,7 +197,8 @@ $TABLE
 
 - **Report hash:** \`$REPORT_HASH\`
 - **Analyzer version:** \`$ANALYZER_VERSION\`
-- **Verify onchain (no report content revealed):** [$VERIFY_URL]($VERIFY_URL)
+${ANCHOR_LINE:+$ANCHOR_LINE
+}- **Verify onchain (no report content revealed):** [$VERIFY_URL]($VERIFY_URL)
 
 The report hash is a deterministic keccak256 over the static findings and input
 identity — anyone can reproduce it and check the receipt on Base independently.

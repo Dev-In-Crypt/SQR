@@ -1,0 +1,50 @@
+name: Action Mint Test
+
+# Hermetically tests action/sqr-mint.sh (onchain anchoring) against a local anvil
+# with the public anvil key — no secrets, no funds, no app stack.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "action/**"
+      - "contracts/ReceiptRegistry.sol"
+      - ".github/workflows/action-mint-test.yml"
+  push:
+    branches: [main]
+    paths:
+      - "action/**"
+      - "contracts/ReceiptRegistry.sol"
+
+permissions:
+  contents: read
+
+jobs:
+  mint:
+    name: Hermetic onchain mint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Recreate foundry.toml (gitignored — see README)
+        run: |
+          cat > foundry.toml <<'EOF'
+          [profile.default]
+          src = "contracts"
+          test = "contracts/test"
+          out = "contracts/out"
+          libs = ["lib"]
+          solc = "0.8.24"
+          EOF
+
+      - name: Run hermetic mint test
+        run: bash action/test/mint-hermetic.sh

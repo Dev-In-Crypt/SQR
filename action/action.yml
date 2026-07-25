@@ -34,6 +34,18 @@ inputs:
     description: "Token used to post the PR comment."
     required: false
     default: ${{ github.token }}
+  mint-key:
+    description: "Report-owner private key (a GitHub Secret) used to anchor the report hash onchain via mintWithSig. Leave empty to skip minting. Never logged."
+    required: false
+    default: ""
+  rpc-url:
+    description: "Base RPC URL to submit the mint transaction (required when mint-key is set)."
+    required: false
+    default: ""
+  registry-address:
+    description: "ReceiptRegistry contract address to anchor into."
+    required: false
+    default: "0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B"
 
 outputs:
   status:
@@ -51,10 +63,24 @@ outputs:
   verify-url:
     description: "Public URL to verify the report hash onchain."
     value: ${{ steps.review.outputs.verify-url }}
+  anchored:
+    description: "'true' when a Base receipt was anchored onchain."
+    value: ${{ steps.review.outputs.anchored }}
+  receipt-id:
+    description: "Onchain receipt id (when minted)."
+    value: ${{ steps.review.outputs.receipt-id }}
+  receipt-tx:
+    description: "Mint transaction hash (when newly minted)."
+    value: ${{ steps.review.outputs.receipt-tx }}
 
 runs:
   using: "composite"
   steps:
+    # Foundry (cast) is only needed when anchoring onchain.
+    - if: ${{ inputs.mint-key != '' }}
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: stable
     - id: review
       shell: bash
       run: bash "$GITHUB_ACTION_PATH/sqr-review.sh"
@@ -66,3 +92,6 @@ runs:
         SQR_COMMENT: ${{ inputs.comment }}
         SQR_API_URL: ${{ inputs.api-url }}
         GH_TOKEN: ${{ inputs.github-token }}
+        SQR_MINT_KEY: ${{ inputs.mint-key }}
+        SQR_RPC_URL: ${{ inputs.rpc-url }}
+        SQR_REGISTRY: ${{ inputs.registry-address }}
