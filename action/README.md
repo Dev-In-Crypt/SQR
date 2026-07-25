@@ -36,6 +36,27 @@ jobs:
           file: contracts/Vault.sol
 ```
 
+### Anchor the review onchain (optional)
+
+Add a report-owner signing key and a Base RPC URL as **GitHub Secrets** and the
+action mints a `ReceiptRegistry` receipt on Base — binding the report hash to your
+owner address and analyzer version — so `/verify` shows it anchored. The key is
+used only to sign the EIP-712 `MintAuthorization` and submit `mintWithSig`; it is
+never logged.
+
+```yaml
+      - uses: Dev-In-Crypt/SQR/action@main
+        with:
+          contract-address: "0xYourVerifiedBaseContract"
+          mint-key: ${{ secrets.SQR_MINT_KEY }}   # report-owner private key
+          rpc-url: ${{ secrets.BASE_RPC_URL }}    # e.g. a Base mainnet RPC
+          # registry-address defaults to the Base mainnet ReceiptRegistry
+```
+
+The mint is idempotent — if the exact report hash is already anchored, the action
+reports it and does not re-submit. Minting requires the owner key to hold enough
+ETH on the target chain for gas.
+
 ## Inputs
 
 | Input | Default | Description |
@@ -47,6 +68,9 @@ jobs:
 | `comment` | `true` | Post/update a PR comment (needs `pull-requests: write`). |
 | `api-url` | `https://solidity-scan.com` | SQR API base URL. |
 | `github-token` | `${{ github.token }}` | Token used to post the PR comment. |
+| `mint-key` | — | Report-owner private key (a Secret) to anchor the report hash onchain. Empty = skip. Never logged. |
+| `rpc-url` | — | Base RPC URL for the mint transaction (required when `mint-key` is set). |
+| `registry-address` | Base mainnet registry | `ReceiptRegistry` contract to anchor into. |
 
 ## Outputs
 
@@ -57,6 +81,9 @@ jobs:
 | `report-hash` | Deterministic keccak256 report hash — the provenance anchor. |
 | `top-severity` | Highest finding severity. |
 | `verify-url` | Public URL to verify the report hash onchain. |
+| `anchored` | `true` when a Base receipt was anchored onchain. |
+| `receipt-id` | Onchain receipt id (when minted). |
+| `receipt-tx` | Mint transaction hash (when newly minted). |
 
 ## What it proves
 
@@ -75,5 +102,6 @@ confirm a review of this exact form existed, without access to its contents.
   a whole contract set, review the deployed **verified** address.
 - **Rate limits** are per-IP (shared CI runners contend); reused identical inputs are
   cached and don't count.
-- **Onchain anchoring** (minting a receipt from CI with a signing key) is the next
-  increment; today the action emits the deterministic hash + public verify link.
+- **Onchain anchoring** is opt-in (see above): provide `mint-key` + `rpc-url` and the
+  action mints a Base receipt so `/verify` shows it anchored. Without them it emits the
+  deterministic hash + public verify link only.
