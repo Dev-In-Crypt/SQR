@@ -21,7 +21,7 @@ The product is Base-only by design. Receipt anchoring uses the ReceiptRegistry c
 
 ## Key features
 - Snippet and verified-address analysis
-- **Full review** (`/`): combined static analysis (Slither + Foundry checks) and AI-assisted logic review
+- **Full review** (`/`): combined static analysis (Slither + Foundry checks, optional Cyfrin Aderyn) and AI-assisted logic review
 - **Quick scan** (`/quick`): free, static-only, no wallet — a lightweight funnel into the full review
 - Deterministic report hashing
 - Optional receipt anchoring flow (EIP-712 signed mint on Base)

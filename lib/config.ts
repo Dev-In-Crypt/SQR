@@ -33,6 +33,12 @@ const envSchema = z.object({
   OPENAI_EXEC_SUMMARY_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   OPENAI_AUDIT_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
   ENABLE_SLITHER: z.string().default("true"),
+  // Second static analyzer (Cyfrin Aderyn) run alongside Slither. Default OFF:
+  // enabling it changes the finding set and therefore the deterministic report
+  // hash, so bump ANALYZER_VERSION/RULESET_VERSION when turning it on in prod.
+  ENABLE_ADERYN: z.string().default("false"),
+  ADERYN_COMMAND: z.string().default("aderyn"),
+  ADERYN_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   SOLC_PATH: z.string().optional(),
   ENABLE_SOLC_AUTO_RESOLVE: z.string().default("true"),
   SOLC_VERSION_MANAGER: z.string().default(""),
@@ -133,7 +139,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
       .filter((item) => item.length > 0),
     isProd: env.NODE_ENV === "production",
     slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true",
-    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true"
+    foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true",
+    aderynEnabled: env.ENABLE_ADERYN.toLowerCase() === "true"
   };
 }
 

@@ -83,6 +83,24 @@ interface SlitherJsonOutput {
   };
 }
 
+interface AderynInstance {
+  contract_path?: string;
+  line_no?: number;
+}
+
+interface AderynIssue {
+  title?: string;
+  description?: string;
+  detector_name?: string;
+  instances?: AderynInstance[];
+}
+
+interface AderynJsonOutput {
+  issue_count?: { high?: number; low?: number };
+  high_issues?: { issues?: AderynIssue[] };
+  low_issues?: { issues?: AderynIssue[] };
+}
+
 const defaultScannerRuntime: ScannerRuntime = {
   async runCommand(command, args, options) {
     return await new Promise<CommandResult>((resolvePromise) => {
@@ -631,6 +649,103 @@ function toSlitherFinding(detector: SlitherDetector): Finding {
   };
 }
 
+function toAderynFinding(issue: AderynIssue, severity: Severity): Finding {
+  const instance = issue.instances?.[0];
+  const filePath = instance?.contract_path ?? "unknown";
+  const line = instance?.line_no;
+  const title = issue.detector_name ?? issue.title ?? "aderyn-finding";
+  const description = (issue.description ?? issue.title ?? "").trim().slice(0, 220);
+  const fingerprint = hashCanonical({
+    source: "aderyn",
+    check: title,
+    filePath,
+    line
+  });
+
+  return {
+    id: fingerprint,
+    title,
+    severity,
+    evidence: [{ filePath, line, excerpt: description }],
+    whyItMatters:
+      description || "Aderyn flagged this pattern as a risk worth reviewing before deployment.",
+    fixDirection: "Review the flagged location and apply the remediation Aderyn describes for this detector.",
+    // Aderyn does not emit a per-finding confidence; use a fixed source-tagged value.
+    confidence: severity === "HIGH" ? 75 : 55,
+    needsManualCheck: false,
+    fingerprint
+  };
+}
+
+export function aderynIssuesToFindings(parsed: AderynJsonOutput): Finding[] {
+  const findings: Finding[] = [];
+  for (const issue of parsed.high_issues?.issues ?? []) {
+    findings.push(toAderynFinding(issue, "HIGH"));
+  }
+  for (const issue of parsed.low_issues?.issues ?? []) {
+    findings.push(toAderynFinding(issue, "LOW"));
+  }
+  return findings;
+}
+
+// Cyfrin Aderyn — a second static analyzer run alongside Slither so the report
+// reflects more than one tool. Aderyn resolves its own solc (via svm) and reads a
+// foundry.toml, so we materialize the bundle and drop a minimal config, mirroring
+// the standalone Slither path. Findings merge into the shared, deduplicated set.
+export async function runAderyn(params: {
+  sourceBundle: SourceBundle;
+  runtime: ScannerRuntime;
+  aderynRequired: boolean;
+}): Promise<ScannerOutput> {
+  const scannerErrors: string[] = [];
+  const warnings: string[] = [];
+
+  const workspace = await materializeSourceBundle(params.sourceBundle);
+  const reportPath = join(workspace.workDir, `aderyn-report-${randomUUID()}.json`);
+
+  const fail = (label: string, diagnostic: string) => {
+    if (params.aderynRequired) {
+      scannerErrors.push(`ADERYN_ERROR:${diagnostic}`);
+    } else {
+      warnings.push(`ADERYN_WARNING:${diagnostic}`);
+    }
+    void label;
+    return { findings: [] as Finding[], scannerErrors, warnings };
+  };
+
+  try {
+    await writeFile(join(workspace.workDir, "foundry.toml"), buildFoundryToml(params.sourceBundle), "utf8");
+
+    const result = await params.runtime.runCommand(
+      config.ADERYN_COMMAND,
+      [".", "--output", reportPath],
+      { cwd: workspace.workDir, env: process.env, timeoutMs: config.ADERYN_TIMEOUT_MS }
+    );
+
+    if (!(await pathExists(reportPath))) {
+      return fail(
+        "no-report",
+        truncateDiagnostic(
+          `exit=${result.code ?? "unknown"} | ${result.stderr.trim() || result.errorMessage || result.stdout.trim()}`
+        )
+      );
+    }
+
+    let parsed: AderynJsonOutput;
+    try {
+      parsed = JSON.parse(await readFile(reportPath, "utf8")) as AderynJsonOutput;
+    } catch (error) {
+      return fail("parse", truncateDiagnostic(error instanceof Error ? error.message : String(error)));
+    }
+
+    return { findings: aderynIssuesToFindings(parsed), scannerErrors, warnings };
+  } catch (error) {
+    return fail("exception", truncateDiagnostic(error instanceof Error ? error.message : String(error)));
+  } finally {
+    await rm(workspace.workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 async function runSlither(params: {
   sourceBundle: SourceBundle;
   runtime: ScannerRuntime;
@@ -1007,9 +1122,11 @@ export async function runStaticScan(
   options: {
     skipSlither?: boolean;
     skipForge?: boolean;
+    skipAderyn?: boolean;
     scanMode?: SlitherRuntimeMode;
     slitherRequired?: boolean;
     forgeRequired?: boolean;
+    aderynRequired?: boolean;
     runtime?: ScannerRuntime;
   } = {}
 ): Promise<ScannerOutput> {
@@ -1024,6 +1141,8 @@ export async function runStaticScan(
 
   const shouldRunSlither = config.slitherEnabled && !options.skipSlither;
   const shouldRunForge = config.foundryEnabled && !options.skipForge;
+  const shouldRunAderyn = config.aderynEnabled && !options.skipAderyn;
+  const aderynRequired = options.aderynRequired ?? false;
 
   if (shouldRunSlither) {
     const slitherResult = await runSlither({
@@ -1047,6 +1166,13 @@ export async function runStaticScan(
     scannerErrors.push(...forgeResult.scannerErrors);
     warnings.push(...forgeResult.warnings);
     findings.push(...forgeResult.findings);
+  }
+
+  if (shouldRunAderyn) {
+    const aderynResult = await runAderyn({ sourceBundle, runtime, aderynRequired });
+    scannerErrors.push(...aderynResult.scannerErrors);
+    warnings.push(...aderynResult.warnings);
+    findings.push(...aderynResult.findings);
   }
 
   if (findings.length === 0) {
