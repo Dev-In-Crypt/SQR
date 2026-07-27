@@ -16,8 +16,9 @@ Solidity Quick Review is an automated Solidity risk-triage product for snippet a
 |---|---|---|
 | Base Mainnet (8453) | Supported | Production network |
 | Base Sepolia (84532) | Supported | Staging/testing path |
+| Arbitrum One (42161) | Behind `ENABLE_ARBITRUM` | Analysis + receipts once a ReceiptRegistry is deployed there (`ARBITRUM_RECEIPT_CONTRACT_ADDRESS`) |
 
-The product is Base-only by design. Receipt anchoring uses the ReceiptRegistry contract on Base mainnet.
+Base is the default network. Arbitrum is available behind the `ENABLE_ARBITRUM` flag: analysis works out of the box (verified-source fetch is multichain), and onchain receipts require a ReceiptRegistry deployed on Arbitrum. Receipts anchor on the same chain the report was analyzed on; `/verify` checks every configured registry.
 
 ## Key features
 - Snippet and verified-address analysis

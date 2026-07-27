@@ -1,6 +1,11 @@
 import { fail, ok, handleRouteError } from "@/lib/api";
 import { isReportOwner } from "@/lib/acl";
 import { prisma } from "@/lib/db";
+import {
+  addEthereumChainParamsForChain,
+  receiptNetworkForChain,
+  requiredReceiptChainId
+} from "@/lib/base-network";
 import { prepareMintAuthorization, readMintedReceiptByHash } from "@/lib/receipt";
 import { getSessionContext } from "@/lib/session";
 
@@ -55,7 +60,13 @@ export async function POST(
       });
     }
 
-    const onchainReceipt = await readMintedReceiptByHash(report.reportHash);
+    const reportJson = report.reportJson as {
+      metadata?: { contractAddress?: string; chainId?: number };
+    };
+    // The receipt anchors on the chain the report was analyzed on.
+    const chainId = reportJson.metadata?.chainId ?? requiredReceiptChainId();
+
+    const onchainReceipt = await readMintedReceiptByHash(report.reportHash, chainId);
     if (
       onchainReceipt.exists &&
       onchainReceipt.owner.toLowerCase() !== session.walletAddress.toLowerCase()
@@ -67,21 +78,26 @@ export async function POST(
       );
     }
 
-    const reportJson = report.reportJson as {
-      metadata?: { contractAddress?: string };
-    };
-
     const prepared = await prepareMintAuthorization({
       reportHash: report.reportHash,
       contractAddress: reportJson.metadata?.contractAddress ?? null,
       owner: session.walletAddress,
-      ttlSeconds: 10 * 60
+      ttlSeconds: 10 * 60,
+      chainId
     });
+
+    const network = receiptNetworkForChain(chainId);
 
     return ok({
       existing: false,
       typedData: prepared.typedData,
-      call: prepared.call
+      call: prepared.call,
+      network: {
+        chainId: network.chainId,
+        chainHex: network.chainHex,
+        label: network.requiredNetworkLabel,
+        addEthereumChain: addEthereumChainParamsForChain(chainId, network.rpcUrl)
+      }
     });
   } catch (error) {
     return handleRouteError(error, {

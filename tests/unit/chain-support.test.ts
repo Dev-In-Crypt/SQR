@@ -57,3 +57,32 @@ describe("enforceAddressChain (Arbitrum enabled)", () => {
     ]);
   });
 });
+
+describe("configuredReceiptChains", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("includes Arbitrum only when enabled and its registry address is set", async () => {
+    vi.stubEnv("APP_ENV", "local");
+    vi.stubEnv("ENABLE_ARBITRUM", "true");
+    vi.stubEnv("RECEIPT_CONTRACT_ADDRESS", "0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B");
+    vi.stubEnv("ARBITRUM_RECEIPT_CONTRACT_ADDRESS", "0x1111111111111111111111111111111111111111");
+    vi.resetModules();
+
+    const { configuredReceiptChains } = await import("@/lib/receipt");
+    expect(configuredReceiptChains()).toEqual([8453, 42161]);
+  });
+
+  it("stays Base-only when Arbitrum registry is not configured", async () => {
+    vi.stubEnv("APP_ENV", "local");
+    vi.stubEnv("ENABLE_ARBITRUM", "true");
+    vi.stubEnv("RECEIPT_CONTRACT_ADDRESS", "0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B");
+    vi.stubEnv("ARBITRUM_RECEIPT_CONTRACT_ADDRESS", "");
+    vi.resetModules();
+
+    const { configuredReceiptChains } = await import("@/lib/receipt");
+    expect(configuredReceiptChains()).toEqual([8453]);
+  });
+});

@@ -149,14 +149,23 @@ export function receiptNetworkByChainId(chainId: number): BaseNetworkMetadata {
 }
 
 export function requiredReceiptNetwork() {
-  const chainId = requiredReceiptChainId();
-  const metadata = metadataForChainId(chainId);
-  const rpcUrl = requiredReceiptRpcUrl();
+  return receiptNetworkForChain(requiredReceiptChainId());
+}
 
-  return {
-    ...metadata,
-    rpcUrl
-  };
+/** Metadata + resolved RPC for any supported chain (throws if RPC not configured). */
+export function receiptNetworkForChain(chainId: number) {
+  const metadata = metadataForChainId(chainId);
+  const rpcUrl = rpcUrlForChainId(chainId);
+
+  if (!rpcUrl) {
+    throw new ApiError(
+      503,
+      "RECEIPT_RPC_UNAVAILABLE",
+      `RPC URL is not configured for chain ${chainId}`
+    );
+  }
+
+  return { ...metadata, rpcUrl };
 }
 
 export function addEthereumChainParamsForChain(chainId: number, rpcUrl: string): AddEthereumChainParams {

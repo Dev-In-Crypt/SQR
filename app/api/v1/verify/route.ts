@@ -3,8 +3,8 @@ import { ApiError } from "@/lib/errors";
 import { prisma } from "@/lib/db";
 import { enforcePublicLookupRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/session";
-import { explorerTxUrl, readMintedReceiptByHash } from "@/lib/receipt";
-import { requiredReceiptNetwork } from "@/lib/base-network";
+import { explorerTxUrl, findMintedReceiptAnyChain } from "@/lib/receipt";
+import { networkLabelForChainId, requiredReceiptNetwork } from "@/lib/base-network";
 
 export const runtime = "nodejs";
 
@@ -26,10 +26,10 @@ export async function GET(request: Request) {
     await enforcePublicLookupRateLimit({ bucket: "verify-ip", ip: await getClientIp() });
 
     const hash = rawHash.toLowerCase();
-    const network = requiredReceiptNetwork();
-    const onchain = await readMintedReceiptByHash(hash);
+    const found = await findMintedReceiptAnyChain(hash);
 
-    if (!onchain.exists) {
+    if (!found) {
+      const network = requiredReceiptNetwork();
       return ok({
         hash,
         verified: false,
@@ -38,6 +38,8 @@ export async function GET(request: Request) {
         record: null
       });
     }
+
+    const { chainId: foundChainId, receipt: onchain } = found;
 
     const record = await prisma.receipt.findFirst({
       where: { reportHash: hash },
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
     return ok({
       hash,
       verified: true,
-      network: { chainId: network.chainId, label: network.requiredNetworkLabel },
+      network: { chainId: foundChainId, label: networkLabelForChainId(foundChainId) },
       onchain: {
         exists: true,
         receiptId: onchain.receiptId,
