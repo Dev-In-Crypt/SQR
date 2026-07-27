@@ -52,6 +52,13 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().optional(),
   OPENAI_GENERAL_MODEL: z.string().optional(),
   OPENAI_AUDIT_MODEL: z.string().optional(),
+  // Multi-model consensus for the AI audit. OFF by default (each extra model is
+  // another LLM call). When on with ≥2 models, the audit runs on each and every
+  // finding is scored by how many models independently raised it. AI output is
+  // outside the deterministic report hash, so this never affects provenance.
+  ENABLE_AI_CONSENSUS: z.string().default("false"),
+  OPENAI_CONSENSUS_MODELS: z.string().default(""),
+  AI_CONSENSUS_MIN_AGREEMENT: z.coerce.number().int().min(1).default(1),
   OPENAI_TEMPERATURE: z.coerce.number().default(0),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
@@ -140,7 +147,11 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     isProd: env.NODE_ENV === "production",
     slitherEnabled: env.ENABLE_SLITHER.toLowerCase() === "true",
     foundryEnabled: env.ENABLE_FOUNDRY_CHECK.toLowerCase() === "true",
-    aderynEnabled: env.ENABLE_ADERYN.toLowerCase() === "true"
+    aderynEnabled: env.ENABLE_ADERYN.toLowerCase() === "true",
+    aiConsensusEnabled: env.ENABLE_AI_CONSENSUS.toLowerCase() === "true",
+    aiConsensusModels: env.OPENAI_CONSENSUS_MODELS.split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
   };
 }
 

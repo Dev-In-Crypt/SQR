@@ -46,6 +46,11 @@ export interface AIAuditFinding {
   evidence: string;
   fixDirection: string;
   source: "ai";
+  // Multi-model consensus scoring (only set when AI consensus is enabled): how
+  // many of the queried models independently raised this finding, out of how
+  // many were consulted. Outside the deterministic report hash.
+  modelAgreement?: number;
+  modelsQueried?: number;
 }
 
 export interface ReportMetadata {

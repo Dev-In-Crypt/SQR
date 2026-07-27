@@ -144,6 +144,89 @@ function isFetchTimeoutError(error: unknown): boolean {
   return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 }
 
+// --- multi-model consensus scoring ----------------------------------------
+// Two findings describe the same issue when they share a severity and either
+// their titles or their locations are similar. Models phrase things differently,
+// so matching is fuzzy (word-set overlap) rather than exact.
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function significantWords(value: string): Set<string> {
+  return new Set(normalizeText(value).split(" ").filter((word) => word.length >= 4));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 0;
+  let intersection = 0;
+  for (const item of a) {
+    if (b.has(item)) intersection += 1;
+  }
+  const union = new Set([...a, ...b]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function findingsMatch(a: AIAuditFinding, b: AIAuditFinding): boolean {
+  if (a.severity !== b.severity) return false;
+  const titleSimilar = jaccard(significantWords(a.title), significantWords(b.title)) >= 0.4;
+  const locA = normalizeText(a.location);
+  const locB = normalizeText(b.location);
+  const locationSimilar =
+    locA.length > 0 &&
+    locB.length > 0 &&
+    (locA.includes(locB) ||
+      locB.includes(locA) ||
+      jaccard(significantWords(a.location), significantWords(b.location)) >= 0.5);
+  return titleSimilar || locationSimilar;
+}
+
+/**
+ * Clusters findings raised by several models into one scored set. Each cluster's
+ * agreement is the number of DISTINCT models that raised it (a single model
+ * raising two similar findings does not inflate the score). The most detailed
+ * variant represents the cluster. Clusters below `minAgreement` are dropped.
+ * Pure and deterministic given its inputs.
+ */
+export function clusterConsensusFindings(
+  perModelFindings: AIAuditFinding[][],
+  minAgreement: number
+): AIAuditFinding[] {
+  const modelsQueried = perModelFindings.length;
+  const clusters: Array<{ members: Array<{ finding: AIAuditFinding; model: number }>; models: Set<number> }> = [];
+
+  for (let model = 0; model < perModelFindings.length; model += 1) {
+    for (const finding of perModelFindings[model]) {
+      const target = clusters.find((cluster) => findingsMatch(cluster.members[0].finding, finding));
+      if (target) {
+        target.members.push({ finding, model });
+        target.models.add(model);
+      } else {
+        clusters.push({ members: [{ finding, model }], models: new Set([model]) });
+      }
+    }
+  }
+
+  const severityRank: Record<string, number> = { CRITICAL: 5, HIGH: 4, MEDIUM: 3, LOW: 2, INFO: 1 };
+
+  return clusters
+    .filter((cluster) => cluster.models.size >= minAgreement)
+    .map((cluster) => {
+      const representative = cluster.members
+        .map((member) => member.finding)
+        .reduce((best, current) => (current.explanation.length > best.explanation.length ? current : best));
+      return {
+        ...representative,
+        modelAgreement: cluster.models.size,
+        modelsQueried
+      };
+    })
+    .sort((a, b) => {
+      const agreement = (b.modelAgreement ?? 0) - (a.modelAgreement ?? 0);
+      if (agreement !== 0) return agreement;
+      return (severityRank[b.severity] ?? 0) - (severityRank[a.severity] ?? 0);
+    });
+}
+
 async function runWithTimeout<T>(action: () => Promise<T> | T, timeoutMs: number, code: string): Promise<T> {
   return await Promise.race([
     Promise.resolve().then(action),
@@ -230,6 +313,114 @@ export async function generateExecutiveSummary(params: {
   }
 }
 
+function resolveAuditModels(): string[] {
+  if (config.aiConsensusEnabled && config.aiConsensusModels.length >= 2) {
+    return config.aiConsensusModels;
+  }
+  return [config.OPENAI_AUDIT_MODEL || config.OPENAI_GENERAL_MODEL];
+}
+
+// One audit call against a single model. Returns raw (unfiltered) AI findings;
+// throws AI_AUDIT_TIMEOUT on timeout so the caller can decide whether to
+// propagate (single-model) or tolerate it (consensus).
+async function requestAuditForModel(
+  model: string,
+  inputPayload: Record<string, unknown>,
+  meta?: { analysisId?: string | null }
+): Promise<AIAuditFinding[]> {
+  const payload = {
+    model,
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content: getSmartContractAuditSystemPrompt()
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          instructions: {
+            returnJson: true,
+            format: [
+              {
+                severity: "CRITICAL|HIGH|MEDIUM|LOW|INFO",
+                title: "string",
+                location: "string",
+                explanation: "string",
+                evidence: "string",
+                fixDirection: "string",
+                source: "ai"
+              }
+            ],
+            mustUseEvidence: true,
+            omitUncertainFindings: true,
+            ifNone: []
+          },
+          input: inputPayload
+        })
+      }
+    ]
+  };
+
+  const endpoint = openAiEndpoint();
+  const headers = openAiHeaders();
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(config.OPENAI_AUDIT_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      logError("AI audit request failed", { status: response.status, body, endpoint, model });
+      return [];
+    }
+
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+
+    recordUsageFromResponse({
+      usage: json.usage,
+      stage: "ai_audit",
+      model,
+      analysisId: meta?.analysisId
+    });
+
+    const content = json.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      return [];
+    }
+
+    const normalized = maybeStripJsonCodeFence(content);
+    try {
+      const parsed = JSON.parse(normalized) as unknown;
+      return toAIAuditFindings(parsed);
+    } catch {
+      logError("AI audit response was not valid JSON", {
+        endpoint,
+        model,
+        preview: normalized.slice(0, 300)
+      });
+      return [];
+    }
+  } catch (error) {
+    if (isFetchTimeoutError(error)) {
+      throw new Error("AI_AUDIT_TIMEOUT");
+    }
+    logError("AI audit request exception", {
+      message: error instanceof Error ? error.message : String(error),
+      endpoint,
+      model
+    });
+    return [];
+  }
+}
+
 export async function generateAIAuditFindings(params: {
   sourceBundle: SourceBundle;
   scannerFindings: Finding[];
@@ -304,93 +495,28 @@ export async function generateAIAuditFindings(params: {
     };
   }
 
-  const payload = {
-    model: config.OPENAI_AUDIT_MODEL || config.OPENAI_GENERAL_MODEL,
-    temperature: 0,
-    messages: [
-      {
-        role: "system",
-        content: getSmartContractAuditSystemPrompt()
-      },
-      {
-        role: "user",
-        content: JSON.stringify({
-          instructions: {
-            returnJson: true,
-            format: [
-              {
-                severity: "CRITICAL|HIGH|MEDIUM|LOW|INFO",
-                title: "string",
-                location: "string",
-                explanation: "string",
-                evidence: "string",
-                fixDirection: "string",
-                source: "ai"
-              }
-            ],
-            mustUseEvidence: true,
-            omitUncertainFindings: true,
-            ifNone: []
-          },
-          input: inputPayload
-        })
-      }
-    ]
-  };
+  const models = resolveAuditModels();
 
-  const endpoint = openAiEndpoint();
-  const headers = openAiHeaders();
-
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(config.OPENAI_AUDIT_TIMEOUT_MS)
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      logError("AI audit request failed", { status: response.status, body, endpoint });
-      return [];
-    }
-
-    const json = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    };
-
-    recordUsageFromResponse({
-      usage: json.usage,
-      stage: "ai_audit",
-      model: payload.model,
-      analysisId: params.meta?.analysisId
-    });
-
-    const content = json.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      return [];
-    }
-
-    const normalized = maybeStripJsonCodeFence(content);
-    try {
-      const parsed = JSON.parse(normalized) as unknown;
-      return filterAIAuditFindings(toAIAuditFindings(parsed));
-    } catch {
-      logError("AI audit response was not valid JSON", {
-        endpoint,
-        preview: normalized.slice(0, 300)
-      });
-      return [];
-    }
-  } catch (error) {
-    if (isFetchTimeoutError(error)) {
-      throw new Error("AI_AUDIT_TIMEOUT");
-    }
-    logError("AI audit request exception", {
-      message: error instanceof Error ? error.message : String(error),
-      endpoint
-    });
-    return [];
+  // Single-model path: unchanged behavior, timeout propagates to the pipeline.
+  if (models.length <= 1) {
+    return filterAIAuditFindings(await requestAuditForModel(models[0], inputPayload, params.meta));
   }
+
+  // Consensus path: query each model in parallel; a model that errors or times
+  // out contributes no findings rather than failing the whole audit. Findings
+  // are then clustered and scored by cross-model agreement.
+  const perModel = await Promise.all(
+    models.map((model) =>
+      requestAuditForModel(model, inputPayload, params.meta).catch((error) => {
+        logError("AI audit model failed in consensus run", {
+          model,
+          message: error instanceof Error ? error.message : String(error)
+        });
+        return [] as AIAuditFinding[];
+      })
+    )
+  );
+
+  const clustered = clusterConsensusFindings(perModel, Math.max(1, config.AI_CONSENSUS_MIN_AGREEMENT));
+  return filterAIAuditFindings(clustered);
 }
