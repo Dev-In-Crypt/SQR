@@ -3,6 +3,8 @@ import { config } from "@/lib/config";
 
 export const BASE_MAINNET_CHAIN_ID = 8453;
 export const BASE_SEPOLIA_CHAIN_ID = 84532;
+export const ARBITRUM_ONE_CHAIN_ID = 42161;
+export const ARBITRUM_SEPOLIA_CHAIN_ID = 421614;
 
 interface BaseNetworkMetadata {
   chainId: number;
@@ -48,10 +50,32 @@ function metadataForChainId(chainId: number): BaseNetworkMetadata {
     };
   }
 
+  if (chainId === ARBITRUM_ONE_CHAIN_ID) {
+    return {
+      chainId,
+      chainHex: "0xa4b1",
+      chainName: "Arbitrum One",
+      requiredNetworkName: "Arbitrum One",
+      requiredNetworkLabel: "Arbitrum One",
+      blockExplorerUrl: "https://arbiscan.io"
+    };
+  }
+
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
+    return {
+      chainId,
+      chainHex: "0x66eee",
+      chainName: "Arbitrum Sepolia",
+      requiredNetworkName: "Arbitrum Sepolia",
+      requiredNetworkLabel: "Arbitrum Sepolia",
+      blockExplorerUrl: "https://sepolia.arbiscan.io"
+    };
+  }
+
   throw new ApiError(
     500,
     "UNSUPPORTED_RECEIPT_CHAIN",
-    `Unsupported receipt chainId ${chainId}. Only Base mainnet (8453) and Base Sepolia (84532) are supported.`
+    `Unsupported chainId ${chainId}. Supported: Base (8453/84532), Arbitrum (42161/421614).`
   );
 }
 
@@ -64,7 +88,33 @@ function rpcUrlForChainId(chainId: number): string | null {
     return config.BASE_SEPOLIA_RPC_URL || config.BASE_RPC_URL || null;
   }
 
+  if (chainId === ARBITRUM_ONE_CHAIN_ID) {
+    return config.ARBITRUM_RPC_URL || null;
+  }
+
+  if (chainId === ARBITRUM_SEPOLIA_CHAIN_ID) {
+    return config.ARBITRUM_SEPOLIA_RPC_URL || config.ARBITRUM_RPC_URL || null;
+  }
+
   return config.BASE_RPC_URL || null;
+}
+
+/** Networks the user may pick for analysis. Base always; Arbitrum when enabled. */
+export function analysisNetworks(): Array<{ chainId: number; label: string }> {
+  const networks = [{ chainId: BASE_MAINNET_CHAIN_ID, label: "Base" }];
+  if (config.arbitrumEnabled) {
+    networks.push({ chainId: ARBITRUM_ONE_CHAIN_ID, label: "Arbitrum One" });
+  }
+  return networks;
+}
+
+/** Human label for a chainId, safe for any chain (no throw). */
+export function networkLabelForChainId(chainId: number): string {
+  try {
+    return metadataForChainId(chainId).chainName;
+  } catch {
+    return `Chain ${chainId}`;
+  }
 }
 
 export function requiredReceiptChainId(): number {
@@ -99,14 +149,23 @@ export function receiptNetworkByChainId(chainId: number): BaseNetworkMetadata {
 }
 
 export function requiredReceiptNetwork() {
-  const chainId = requiredReceiptChainId();
-  const metadata = metadataForChainId(chainId);
-  const rpcUrl = requiredReceiptRpcUrl();
+  return receiptNetworkForChain(requiredReceiptChainId());
+}
 
-  return {
-    ...metadata,
-    rpcUrl
-  };
+/** Metadata + resolved RPC for any supported chain (throws if RPC not configured). */
+export function receiptNetworkForChain(chainId: number) {
+  const metadata = metadataForChainId(chainId);
+  const rpcUrl = rpcUrlForChainId(chainId);
+
+  if (!rpcUrl) {
+    throw new ApiError(
+      503,
+      "RECEIPT_RPC_UNAVAILABLE",
+      `RPC URL is not configured for chain ${chainId}`
+    );
+  }
+
+  return { ...metadata, rpcUrl };
 }
 
 export function addEthereumChainParamsForChain(chainId: number, rpcUrl: string): AddEthereumChainParams {

@@ -13,6 +13,14 @@ const envSchema = z.object({
   BASE_RPC_URL: z.string().optional(),
   BASE_MAINNET_RPC_URL: z.string().optional(),
   BASE_SEPOLIA_RPC_URL: z.string().optional(),
+  // Arbitrum as a second analyzable network. OFF by default: when off, the chain
+  // allowlist and the network dropdown stay Base-only. Analysis (source fetch via
+  // Etherscan V2 + Sourcify) is already chain-agnostic; onchain receipts on
+  // Arbitrum require ARBITRUM_RECEIPT_CONTRACT_ADDRESS (a registry deployed there).
+  ENABLE_ARBITRUM: z.string().default("false"),
+  ARBITRUM_RPC_URL: z.string().optional(),
+  ARBITRUM_SEPOLIA_RPC_URL: z.string().optional(),
+  ARBITRUM_RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
   BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
   SOURCIFY_API_URL: z
@@ -151,7 +159,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     aiConsensusEnabled: env.ENABLE_AI_CONSENSUS.toLowerCase() === "true",
     aiConsensusModels: env.OPENAI_CONSENSUS_MODELS.split(",")
       .map((item) => item.trim())
-      .filter((item) => item.length > 0)
+      .filter((item) => item.length > 0),
+    arbitrumEnabled: env.ENABLE_ARBITRUM.toLowerCase() === "true"
   };
 }
 

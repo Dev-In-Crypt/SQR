@@ -1,5 +1,6 @@
 import { ok, handleRouteError } from "@/lib/api";
 import {
+  analysisNetworks,
   requiredReceiptAddEthereumChainParams,
   requiredReceiptNetwork
 } from "@/lib/base-network";
@@ -17,7 +18,8 @@ export async function GET() {
         requiredNetworkName: network.requiredNetworkName,
         requiredNetworkLabel: network.requiredNetworkLabel,
         addEthereumChain: requiredReceiptAddEthereumChainParams()
-      }
+      },
+      analysisNetworks: analysisNetworks()
     });
   } catch (error) {
     return handleRouteError(error, { route: "GET /api/v1/config" });

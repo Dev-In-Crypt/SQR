@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { isAddress } from "viem";
 
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
@@ -12,7 +12,10 @@ const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
 export default function QuickScanForm() {
-  const chainId = 8453;
+  const [analysisChainId, setAnalysisChainId] = useState(8453);
+  const [networks, setNetworks] = useState<Array<{ chainId: number; label: string }>>([
+    { chainId: 8453, label: "Base" }
+  ]);
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -24,6 +27,27 @@ export default function QuickScanForm() {
   const snippetCompleteness = useMemo(() => analyzeSnippetCompleteness(code), [code]);
   const snippetIncomplete = !snippetCompleteness.isComplete;
   const addressInvalid = trimmedAddress.length > 0 && !isAddress(trimmedAddress);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/config", { cache: "no-store" });
+        if (!response.ok || !active) return;
+        const payload = (await response.json()) as {
+          analysisNetworks?: Array<{ chainId: number; label: string }>;
+        };
+        if (payload.analysisNetworks?.length) {
+          setNetworks(payload.analysisNetworks);
+        }
+      } catch {
+        /* keep Base-only default */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,8 +76,8 @@ export default function QuickScanForm() {
     try {
       const payload =
         tab === "PASTE_CODE"
-          ? { inputType: "PASTE_CODE", code, chainId }
-          : { inputType: "BASE_ADDRESS", address: trimmedAddress, chainId };
+          ? { inputType: "PASTE_CODE", code, chainId: analysisChainId }
+          : { inputType: "BASE_ADDRESS", address: trimmedAddress, chainId: analysisChainId };
 
       const response = await fetch("/api/v1/analysis/quick", {
         method: "POST",
@@ -94,6 +118,26 @@ export default function QuickScanForm() {
           <span className="badge">Instant</span>
         </div>
       </div>
+
+      {networks.length > 1 ? (
+        <label className="stack home-input-group">
+          <span>Network</span>
+          <select
+            className="select"
+            value={analysisChainId}
+            onChange={(event) => {
+              setAnalysisChainId(Number(event.target.value));
+              setError(null);
+            }}
+          >
+            {networks.map((network) => (
+              <option key={network.chainId} value={network.chainId}>
+                {network.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="home-tab-row" role="tablist" aria-label="Quick scan input type">
         <button

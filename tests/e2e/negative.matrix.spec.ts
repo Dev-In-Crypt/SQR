@@ -306,8 +306,8 @@ test("negative UI receipt: wrong network + rejected switch shows actionable mess
 
   await page.goto(`/r/${created.reportId}`);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Mint Base receipt" })).toBeEnabled();
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await expect(page.getByRole("button", { name: "Mint onchain receipt" })).toBeEnabled();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
 
   await expect
     .poll(async () => page.evaluate(() => (window as any).__mockWalletState.switchCalls), { timeout: 20000 })
@@ -401,7 +401,7 @@ test("negative UI receipt: 4902 path triggers add+switch", async ({ page }) => {
     response.url().includes(`/api/v1/receipt/${created.reportId}/confirm`) &&
     response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
   const confirm = await confirmResponse;
   const confirmBody = (await confirm.json()) as { error?: { code?: string } };
 
@@ -484,14 +484,14 @@ test("negative UI receipt: owner mismatch prompts re-prepare", async ({ page }) 
 
   await page.goto(`/r/${created.reportId}`);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Mint Base receipt" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Mint onchain receipt" })).toBeEnabled();
   const prepareResponse = page.waitForResponse((response) => {
     return (
       response.url().includes(`/api/v1/receipt/${created.reportId}/prepare`) &&
       response.request().method() === "POST"
     );
   });
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
   await prepareResponse;
 
   const walletState = await page.evaluate(() => (window as any).__mockWalletState);
@@ -582,7 +582,7 @@ test("negative UI receipt: event mismatch error is surfaced", async ({ page }) =
     response.url().includes(`/api/v1/receipt/${created.reportId}/confirm`) &&
     response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
   const confirm = await confirmResponse;
   const confirmBody = (await confirm.json()) as { error?: { code?: string } };
 
@@ -622,7 +622,7 @@ test("negative UI receipt: duplicate mint stays stable via existing receipt path
   });
 
   await page.goto(`/r/${created.reportId}`);
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
 
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
   await expect(page.getByText(/receipt verification/i)).toHaveCount(0);

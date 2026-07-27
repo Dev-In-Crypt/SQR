@@ -12,10 +12,12 @@ import {
 } from "viem";
 
 import {
+  ARBITRUM_ONE_CHAIN_ID,
+  ARBITRUM_SEPOLIA_CHAIN_ID,
   explorerBaseUrlForChainId,
   receiptNetworkByChainId,
+  receiptNetworkForChain,
   requiredReceiptChainId,
-  requiredReceiptNetwork,
   requiredReceiptRpcUrl
 } from "@/lib/base-network";
 import { config } from "@/lib/config";
@@ -32,10 +34,15 @@ import {
 
 export { receiptRegistryAbi };
 
-function configuredReceiptContract(): Address {
-  const value = config.RECEIPT_CONTRACT_ADDRESS;
+// The ReceiptRegistry is deployed per-chain: Base uses RECEIPT_CONTRACT_ADDRESS,
+// Arbitrum uses ARBITRUM_RECEIPT_CONTRACT_ADDRESS. A report is anchored on the
+// chain it was analyzed on, so all receipt operations are parameterized by chainId.
+function receiptContractForChain(chainId: number): Address {
+  const isArbitrum = chainId === ARBITRUM_ONE_CHAIN_ID || chainId === ARBITRUM_SEPOLIA_CHAIN_ID;
+  const value = isArbitrum ? config.ARBITRUM_RECEIPT_CONTRACT_ADDRESS : config.RECEIPT_CONTRACT_ADDRESS;
+
   if (!value) {
-    throw new ApiError(503, "RECEIPT_UNAVAILABLE", "Receipt contract address is not configured");
+    throw new ApiError(503, "RECEIPT_UNAVAILABLE", `Receipt contract is not configured for chain ${chainId}`);
   }
 
   if (!isAddress(value)) {
@@ -45,8 +52,8 @@ function configuredReceiptContract(): Address {
   return value;
 }
 
-function requiredChainContext() {
-  const network = requiredReceiptNetwork();
+function chainContextFor(chainId: number) {
+  const network = receiptNetworkForChain(chainId);
 
   return {
     chainId: network.chainId,
@@ -68,8 +75,8 @@ function requiredChainContext() {
   };
 }
 
-function requiredChainClient() {
-  const context = requiredChainContext();
+function chainClientFor(chainId: number) {
+  const context = chainContextFor(chainId);
 
   return createPublicClient({
     chain: context.chain,
@@ -141,13 +148,16 @@ export async function receiptSubsystemHealth(): Promise<ReceiptSubsystemHealth> 
   return value;
 }
 
-export async function readOwnerMintNonce(owner: string): Promise<bigint> {
+export async function readOwnerMintNonce(
+  owner: string,
+  chainId: number = requiredReceiptChainId()
+): Promise<bigint> {
   if (!isAddress(owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
   }
 
-  const receiptContract = configuredReceiptContract();
-  const client = requiredChainClient();
+  const receiptContract = receiptContractForChain(chainId);
+  const client = chainClientFor(chainId);
 
   try {
     return await client.readContract({
@@ -189,6 +199,7 @@ export async function prepareMintAuthorization(params: {
   contractAddress?: string | null;
   owner: string;
   ttlSeconds?: number;
+  chainId?: number;
 }): Promise<{
   typedData: ReturnType<typeof buildMintAuthorizationRpcTypedData>;
   call: {
@@ -205,16 +216,16 @@ export async function prepareMintAuthorization(params: {
     };
   };
 }> {
-  const receiptContract = configuredReceiptContract();
+  const chainId = params.chainId ?? requiredReceiptChainId();
+  const receiptContract = receiptContractForChain(chainId);
 
   if (!isAddress(params.owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
   }
 
   const owner = params.owner as Address;
-  const nonce = await readOwnerMintNonce(owner);
+  const nonce = await readOwnerMintNonce(owner, chainId);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + (params.ttlSeconds ?? 600));
-  const chainId = requiredReceiptChainId();
 
   const message: MintAuthorizationMessage = {
     reportHash: params.reportHash as Hex,
@@ -249,7 +260,10 @@ export async function prepareMintAuthorization(params: {
   };
 }
 
-export async function readMintedReceiptByHash(reportHash: string): Promise<
+export async function readMintedReceiptByHash(
+  reportHash: string,
+  chainId: number = requiredReceiptChainId()
+): Promise<
   | { exists: false }
   | {
       exists: true;
@@ -260,8 +274,8 @@ export async function readMintedReceiptByHash(reportHash: string): Promise<
       timestamp: Date;
     }
 > {
-  const receiptContract = configuredReceiptContract();
-  const client = requiredChainClient();
+  const receiptContract = receiptContractForChain(chainId);
+  const client = chainClientFor(chainId);
 
   try {
     const result = await client.readContract({
@@ -311,6 +325,41 @@ export async function readMintedReceiptByHash(reportHash: string): Promise<
   }
 }
 
+/** Chains that have a configured ReceiptRegistry, in lookup order (Base first). */
+export function configuredReceiptChains(): number[] {
+  const chains: number[] = [];
+  if (config.RECEIPT_CONTRACT_ADDRESS) {
+    chains.push(requiredReceiptChainId());
+  }
+  if (config.arbitrumEnabled && config.ARBITRUM_RECEIPT_CONTRACT_ADDRESS) {
+    chains.push(ARBITRUM_ONE_CHAIN_ID);
+  }
+  return chains;
+}
+
+/**
+ * A report hash is chain-agnostic but its receipt lives on the analysis chain.
+ * Verification by hash alone probes each configured registry and returns the
+ * chain where the receipt is anchored (or null). Per-chain RPC/contract errors
+ * are swallowed so one unavailable chain does not mask a hit on another.
+ */
+export async function findMintedReceiptAnyChain(reportHash: string): Promise<{
+  chainId: number;
+  receipt: Extract<Awaited<ReturnType<typeof readMintedReceiptByHash>>, { exists: true }>;
+} | null> {
+  for (const chainId of configuredReceiptChains()) {
+    try {
+      const receipt = await readMintedReceiptByHash(reportHash, chainId);
+      if (receipt.exists) {
+        return { chainId, receipt };
+      }
+    } catch {
+      // Try the next chain.
+    }
+  }
+  return null;
+}
+
 export async function recoverMintAuthorizationSigner(params: {
   reportHash: string;
   contractAddress?: string | null;
@@ -318,8 +367,10 @@ export async function recoverMintAuthorizationSigner(params: {
   nonce: string;
   deadline: string;
   signature: string;
+  chainId?: number;
 }): Promise<Address> {
-  const receiptContract = configuredReceiptContract();
+  const chainId = params.chainId ?? requiredReceiptChainId();
+  const receiptContract = receiptContractForChain(chainId);
 
   if (!isAddress(params.owner)) {
     throw new ApiError(400, "INVALID_OWNER", "Owner address is invalid");
@@ -330,7 +381,7 @@ export async function recoverMintAuthorizationSigner(params: {
   }
 
   const typedData = buildMintAuthorizationTypedData({
-    chainId: requiredReceiptChainId(),
+    chainId,
     verifyingContract: receiptContract,
     message: {
       reportHash: params.reportHash as Hex,
@@ -351,8 +402,11 @@ export async function recoverMintAuthorizationSigner(params: {
   });
 }
 
-export async function hasTransactionReceiptOnRequiredChain(txHash: string): Promise<boolean> {
-  const client = requiredChainClient();
+export async function hasTransactionReceiptOnRequiredChain(
+  txHash: string,
+  chainId: number = requiredReceiptChainId()
+): Promise<boolean> {
+  const client = chainClientFor(chainId);
 
   try {
     await client.getTransactionReceipt({ hash: txHash as Hex });
@@ -366,7 +420,10 @@ export async function hasTransactionReceiptOnRequiredChain(txHash: string): Prom
   }
 }
 
-export async function readMintedEventFromTx(txHash: string): Promise<{
+export async function readMintedEventFromTx(
+  txHash: string,
+  chainId: number = requiredReceiptChainId()
+): Promise<{
   reportHash: string;
   contractAddress: string;
   owner: string;
@@ -374,8 +431,8 @@ export async function readMintedEventFromTx(txHash: string): Promise<{
   timestamp: Date;
   receiptId: string;
 } | null> {
-  const client = requiredChainClient();
-  const expectedContract = configuredReceiptContract().toLowerCase();
+  const client = chainClientFor(chainId);
+  const expectedContract = receiptContractForChain(chainId).toLowerCase();
 
   let txReceipt;
   try {

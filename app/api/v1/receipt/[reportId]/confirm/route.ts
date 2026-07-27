@@ -68,12 +68,14 @@ export async function POST(
     }
 
     const reportJson = report.reportJson as {
-      metadata?: { contractAddress?: string };
+      metadata?: { contractAddress?: string; chainId?: number };
     };
+    // The receipt is anchored on the chain the report was analyzed on.
+    const chainId = reportJson.metadata?.chainId ?? requiredReceiptChainId();
 
     let onRequiredNetwork = false;
     try {
-      onRequiredNetwork = await hasTransactionReceiptOnRequiredChain(payload.txHash);
+      onRequiredNetwork = await hasTransactionReceiptOnRequiredChain(payload.txHash, chainId);
     } catch {
       return fail(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
     }
@@ -83,7 +85,7 @@ export async function POST(
 
     let eventData: Awaited<ReturnType<typeof readMintedEventFromTx>> = null;
     try {
-      eventData = await readMintedEventFromTx(payload.txHash);
+      eventData = await readMintedEventFromTx(payload.txHash, chainId);
     } catch {
       return fail(503, "RECEIPT_CHAIN_UNAVAILABLE", "Receipt chain RPC is unavailable. Try again.");
     }
@@ -104,7 +106,8 @@ export async function POST(
         owner: payload.owner,
         nonce: payload.nonce,
         deadline: payload.deadline,
-        signature: payload.signature
+        signature: payload.signature,
+        chainId
       });
     } catch (error) {
       if (error instanceof ApiError && error.code === "INVALID_SIGNATURE") {
@@ -126,14 +129,12 @@ export async function POST(
       return fail(400, "OWNER_MISMATCH", "Transaction event owner does not match signed owner");
     }
 
-    const requiredChain = requiredReceiptChainId();
-
     const created = await prisma.receipt.create({
       data: {
         reportId: report.id,
         reportHash: report.reportHash,
         txHash: payload.txHash,
-        chainId: requiredChain,
+        chainId,
         contractAddress: eventData.contractAddress,
         receiptId: eventData.receiptId,
         mintedBy: eventData.minter,
@@ -146,7 +147,7 @@ export async function POST(
     return ok({
       existing: false,
       receipt: created,
-      explorerUrl: explorerTxUrl(payload.txHash, requiredChain)
+      explorerUrl: explorerTxUrl(payload.txHash, chainId)
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

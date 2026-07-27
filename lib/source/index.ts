@@ -3,6 +3,7 @@ import { isAddress } from "viem";
 import { ApiError } from "@/lib/errors";
 import { hashCanonical } from "@/lib/hash";
 import { config } from "@/lib/config";
+import { ARBITRUM_ONE_CHAIN_ID, ARBITRUM_SEPOLIA_CHAIN_ID } from "@/lib/base-network";
 import { extractSolidityPragmaFromFiles, extractSolidityPragmaFromSource } from "@/lib/solidity-pragma";
 import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
 import type { InputType, SourceBundle, SourceFile } from "@/lib/types";
@@ -168,12 +169,25 @@ export function computeInputHash(params: {
 
 export function enforceAddressChain(chainId: number): void {
   const allowed = [config.BASE_CHAIN_ID, config.STAGING_BASE_CHAIN_ID];
-  if (!allowed.includes(chainId)) {
-    throw new ApiError(400, "INVALID_CHAIN", "Only Base mainnet or Base Sepolia are supported");
+  const allowedProduction = [config.BASE_CHAIN_ID];
+
+  if (config.arbitrumEnabled) {
+    allowed.push(ARBITRUM_ONE_CHAIN_ID, ARBITRUM_SEPOLIA_CHAIN_ID);
+    allowedProduction.push(ARBITRUM_ONE_CHAIN_ID);
   }
 
-  if (config.APP_ENV === "production" && chainId !== config.BASE_CHAIN_ID) {
-    throw new ApiError(400, "INVALID_CHAIN", "Production only accepts Base mainnet chainId 8453");
+  if (!allowed.includes(chainId)) {
+    throw new ApiError(
+      400,
+      "INVALID_CHAIN",
+      config.arbitrumEnabled
+        ? "Supported networks: Base or Arbitrum"
+        : "Only Base mainnet or Base Sepolia are supported"
+    );
+  }
+
+  if (config.APP_ENV === "production" && !allowedProduction.includes(chainId)) {
+    throw new ApiError(400, "INVALID_CHAIN", "This network is not enabled in production");
   }
 }
 

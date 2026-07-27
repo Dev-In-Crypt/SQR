@@ -105,6 +105,18 @@ interface PreparedReceiptResponse {
       deadline: string;
     };
   };
+  network?: {
+    chainId: number;
+    chainHex: `0x${string}`;
+    label: string;
+    addEthereumChain: {
+      chainId: `0x${string}`;
+      chainName: string;
+      nativeCurrency: { name: string; symbol: string; decimals: number };
+      rpcUrls: string[];
+      blockExplorerUrls: string[];
+    };
+  };
   error?: { code?: string; message?: string };
 }
 
@@ -343,6 +355,17 @@ function displayInputType(metadataInputType: string, contractAddress?: string): 
   }
 
   return metadataInputType;
+}
+
+const CHAIN_LABELS: Record<number, string> = {
+  8453: "Base",
+  84532: "Base Sepolia",
+  42161: "Arbitrum One",
+  421614: "Arbitrum Sepolia"
+};
+
+function displayChain(chainId: number): string {
+  return `${CHAIN_LABELS[chainId] ?? "Chain"} (${chainId})`;
 }
 
 function shortenHash(value: string): string {
@@ -795,23 +818,16 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     return prepJson;
   }
 
-  function ensurePreparedChainMatchesRequired(
-    prepared: PreparedReceiptResponse,
-    required: RuntimeConfigResponse["receipt"]
-  ) {
+  // The receipt anchors on the report's own analysis chain (targetChainId, from
+  // the prepare response when present, else the global required network).
+  function ensurePreparedChainConsistent(prepared: PreparedReceiptResponse, targetChainId: number) {
     if (!prepared.call || !prepared.typedData) {
       throw new Error("Prepare response missing typedData/call payload");
     }
 
-    if (prepared.call.chainId !== required.requiredChainId) {
+    if (prepared.call.chainId !== targetChainId || prepared.typedData.domain.chainId !== targetChainId) {
       throw new Error(
-        `Prepare chain mismatch: required ${required.requiredChainId}, received ${prepared.call.chainId}`
-      );
-    }
-
-    if (prepared.typedData.domain.chainId !== required.requiredChainId) {
-      throw new Error(
-        `Typed data chain mismatch: required ${required.requiredChainId}, received ${prepared.typedData.domain.chainId}`
+        `Prepared mint chain mismatch: target ${targetChainId}, call ${prepared.call.chainId}, typedData ${prepared.typedData.domain.chainId}`
       );
     }
   }
@@ -834,19 +850,6 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         throw new Error("No wallet account available");
       }
 
-      const ensureRequiredChain = async () => {
-        const ensured = await ensureChain({
-          provider,
-          requiredChainId: required.requiredChainId,
-          requiredNetworkLabel: required.requiredNetworkLabel,
-          addEthereumChain: required.addEthereumChain
-        });
-
-        setWalletChainHex(ensured.chainHex);
-      };
-
-      await ensureRequiredChain();
-
       let prepared = await fetchPreparedMint();
 
       if (prepared.existing) {
@@ -854,7 +857,29 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         return;
       }
 
-      ensurePreparedChainMatchesRequired(prepared, required);
+      // Prefer the report's own chain from the prepare response; fall back to the
+      // global required network for older responses / mocks without `network`.
+      const targetNetwork = prepared.network ?? {
+        chainId: required.requiredChainId,
+        chainHex: required.requiredChainHex,
+        label: required.requiredNetworkLabel,
+        addEthereumChain: required.addEthereumChain
+      };
+
+      ensurePreparedChainConsistent(prepared, targetNetwork.chainId);
+
+      const ensureRequiredChain = async () => {
+        const ensured = await ensureChain({
+          provider,
+          requiredChainId: targetNetwork.chainId,
+          requiredNetworkLabel: targetNetwork.label,
+          addEthereumChain: targetNetwork.addEthereumChain
+        });
+
+        setWalletChainHex(ensured.chainHex);
+      };
+
+      await ensureRequiredChain();
 
       if (from.toLowerCase() !== prepared.call!.args.owner.toLowerCase()) {
         throw new Error("Connected wallet does not match prepared owner");
@@ -867,7 +892,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainMatchesRequired(prepared, required);
+        ensurePreparedChainConsistent(prepared, targetNetwork.chainId);
       }
 
       let signedMint: ConfirmPayload;
@@ -889,7 +914,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainMatchesRequired(refreshed, required);
+        ensurePreparedChainConsistent(refreshed, targetNetwork.chainId);
         if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
           throw new Error("Connected wallet does not match prepared owner");
         }
@@ -917,7 +942,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainMatchesRequired(refreshed, required);
+        ensurePreparedChainConsistent(refreshed, targetNetwork.chainId);
         if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
           throw new Error("Connected wallet does not match prepared owner");
         }
@@ -1030,7 +1055,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </div>
               <div className="metadata-item stack">
                 <span className="meta-label">Chain</span>
-                <div className="meta-value">Base ({data.report.metadata.chainId})</div>
+                <div className="meta-value">{displayChain(data.report.metadata.chainId)}</div>
               </div>
               <div className="metadata-item stack">
                 <span className="meta-label">Report hash</span>
@@ -1201,7 +1226,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                     </button>
                   ) : null}
                   <button className="button warn" type="button" disabled={busy} onClick={mintReceipt}>
-                    Mint Base receipt
+                    Mint onchain receipt
                   </button>
                 </div>
 
@@ -1245,7 +1270,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               <div className="section-eyebrow">Provenance</div>
               <h2 style={{ margin: 0 }}>Onchain Receipt</h2>
               <p className="muted">
-                No receipt is attached yet. The report remains offchain unless the owner chooses to mint a Base receipt.
+                No receipt is attached yet. The report remains offchain unless the owner chooses to mint an onchain receipt.
               </p>
             </div>
           )}
