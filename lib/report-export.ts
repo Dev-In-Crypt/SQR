@@ -41,6 +41,9 @@ function aiFindingBlock(finding: AIAuditFinding): string {
   lines.push(`#### ${finding.title}`);
   lines.push("");
   lines.push(`- **Severity:** ${finding.severity}  |  **Location:** ${finding.location || "n/a"}`);
+  if (typeof finding.modelAgreement === "number" && typeof finding.modelsQueried === "number") {
+    lines.push(`- **Model consensus:** ${finding.modelAgreement} of ${finding.modelsQueried} models agreed`);
+  }
   if (finding.explanation) {
     lines.push(`- **Explanation:** ${finding.explanation}`);
   }
