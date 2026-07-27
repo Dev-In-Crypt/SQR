@@ -300,7 +300,7 @@ test("suite B smoke: wrong wallet network triggers switch and mint succeeds", as
   await page.goto(`/r/${created.reportId}`);
   await expect(page.getByRole("heading", { name: "Security Report" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Mint Base receipt" }).click();
+  await page.getByRole("button", { name: "Mint onchain receipt" }).click();
 
   // The "Onchain Receipt" heading is always present on the report page, so it
   // is not a completion signal. The mint flow is async (config fetch → chain

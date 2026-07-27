@@ -818,17 +818,16 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     return prepJson;
   }
 
-  // The receipt anchors on the report's own analysis chain, delivered in the
-  // prepare response. Validate the payload is internally consistent about it.
-  function ensurePreparedChainConsistent(prepared: PreparedReceiptResponse) {
-    if (!prepared.call || !prepared.typedData || !prepared.network) {
-      throw new Error("Prepare response missing typedData/call/network payload");
+  // The receipt anchors on the report's own analysis chain (targetChainId, from
+  // the prepare response when present, else the global required network).
+  function ensurePreparedChainConsistent(prepared: PreparedReceiptResponse, targetChainId: number) {
+    if (!prepared.call || !prepared.typedData) {
+      throw new Error("Prepare response missing typedData/call payload");
     }
 
-    const target = prepared.network.chainId;
-    if (prepared.call.chainId !== target || prepared.typedData.domain.chainId !== target) {
+    if (prepared.call.chainId !== targetChainId || prepared.typedData.domain.chainId !== targetChainId) {
       throw new Error(
-        `Prepared mint chain mismatch: network ${target}, call ${prepared.call.chainId}, typedData ${prepared.typedData.domain.chainId}`
+        `Prepared mint chain mismatch: target ${targetChainId}, call ${prepared.call.chainId}, typedData ${prepared.typedData.domain.chainId}`
       );
     }
   }
@@ -843,9 +842,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
       }
 
       const provider = window.ethereum;
-      // Keeps the fallback network label populated; the actual mint chain comes
-      // from the prepare response (the report's own analysis chain).
-      await fetchRuntimeConfig().catch(() => null);
+      const required = await fetchRuntimeConfig();
 
       const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
       const from = accounts?.[0] as Address | undefined;
@@ -860,9 +857,17 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
         return;
       }
 
-      ensurePreparedChainConsistent(prepared);
+      // Prefer the report's own chain from the prepare response; fall back to the
+      // global required network for older responses / mocks without `network`.
+      const targetNetwork = prepared.network ?? {
+        chainId: required.requiredChainId,
+        chainHex: required.requiredChainHex,
+        label: required.requiredNetworkLabel,
+        addEthereumChain: required.addEthereumChain
+      };
 
-      const targetNetwork = prepared.network!;
+      ensurePreparedChainConsistent(prepared, targetNetwork.chainId);
+
       const ensureRequiredChain = async () => {
         const ensured = await ensureChain({
           provider,
@@ -887,7 +892,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainConsistent(prepared);
+        ensurePreparedChainConsistent(prepared, targetNetwork.chainId);
       }
 
       let signedMint: ConfirmPayload;
@@ -909,7 +914,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainConsistent(refreshed);
+        ensurePreparedChainConsistent(refreshed, targetNetwork.chainId);
         if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
           throw new Error("Connected wallet does not match prepared owner");
         }
@@ -937,7 +942,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
           return;
         }
 
-        ensurePreparedChainConsistent(refreshed);
+        ensurePreparedChainConsistent(refreshed, targetNetwork.chainId);
         if (from.toLowerCase() !== refreshed.call!.args.owner.toLowerCase()) {
           throw new Error("Connected wallet does not match prepared owner");
         }
