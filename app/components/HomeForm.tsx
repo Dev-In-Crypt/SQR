@@ -21,7 +21,13 @@ interface PaidOffer {
 }
 
 export default function HomeForm() {
-  const chainId = 8453;
+  const [analysisChainId, setAnalysisChainId] = useState(8453);
+  const [networks, setNetworks] = useState<Array<{ chainId: number; label: string }>>([
+    { chainId: 8453, label: "Base" }
+  ]);
+  // The x402 payment always settles on the Base network, independent of which
+  // chain the user analyzes; derived from /config, not the analysis dropdown.
+  const [paymentChainId, setPaymentChainId] = useState(8453);
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
@@ -57,6 +63,35 @@ export default function HomeForm() {
 
   useEffect(() => {
     void refreshSession();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/v1/config", { cache: "no-store" });
+        if (!response.ok || !active) return;
+        const payload = (await response.json()) as {
+          analysisNetworks?: Array<{ chainId: number; label: string }>;
+          receipt?: { requiredChainId?: number };
+        };
+        if (payload.analysisNetworks?.length) {
+          setNetworks(payload.analysisNetworks);
+          if (!payload.analysisNetworks.some((n) => n.chainId === analysisChainId)) {
+            setAnalysisChainId(payload.analysisNetworks[0].chainId);
+          }
+        }
+        if (typeof payload.receipt?.requiredChainId === "number") {
+          setPaymentChainId(payload.receipt.requiredChainId);
+        }
+      } catch {
+        /* keep Base-only defaults */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -187,12 +222,12 @@ export default function HomeForm() {
       ? {
           inputType: "PASTE_CODE",
           code,
-          chainId
+          chainId: analysisChainId
         }
       : {
           inputType: "BASE_ADDRESS",
           address: trimmedAddress,
-          chainId
+          chainId: analysisChainId
         };
   }
 
@@ -223,7 +258,7 @@ export default function HomeForm() {
 
       const walletClient = createWalletClient({
         account: accounts[0] as `0x${string}`,
-        chain: chainId === 8453 ? base : baseSepolia,
+        chain: paymentChainId === 8453 ? base : baseSepolia,
         transport: custom(window.ethereum)
       }).extend(publicActions);
 
@@ -283,11 +318,31 @@ export default function HomeForm() {
       <div className="home-form-header stack">
         <div className="memo-kicker">Start a review</div>
         <div className="row home-form-meta">
-          <span className="badge">Base focused</span>
+          <span className="badge">{networks.length > 1 ? "Base + Arbitrum" : "Base focused"}</span>
           <span className="badge">Private reports</span>
           <span className="badge">Memo output</span>
         </div>
       </div>
+
+      {networks.length > 1 ? (
+        <label className="stack home-input-group">
+          <span>Network</span>
+          <select
+            className="select"
+            value={analysisChainId}
+            onChange={(event) => {
+              setAnalysisChainId(Number(event.target.value));
+              setError(null);
+            }}
+          >
+            {networks.map((network) => (
+              <option key={network.chainId} value={network.chainId}>
+                {network.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       <div className="home-tab-row" role="tablist" aria-label="Analyze input type">
         <button

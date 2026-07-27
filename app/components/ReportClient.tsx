@@ -345,6 +345,17 @@ function displayInputType(metadataInputType: string, contractAddress?: string): 
   return metadataInputType;
 }
 
+const CHAIN_LABELS: Record<number, string> = {
+  8453: "Base",
+  84532: "Base Sepolia",
+  42161: "Arbitrum One",
+  421614: "Arbitrum Sepolia"
+};
+
+function displayChain(chainId: number): string {
+  return `${CHAIN_LABELS[chainId] ?? "Chain"} (${chainId})`;
+}
+
 function shortenHash(value: string): string {
   if (value.length <= 16) {
     return value;
@@ -1030,7 +1041,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </div>
               <div className="metadata-item stack">
                 <span className="meta-label">Chain</span>
-                <div className="meta-value">Base ({data.report.metadata.chainId})</div>
+                <div className="meta-value">{displayChain(data.report.metadata.chainId)}</div>
               </div>
               <div className="metadata-item stack">
                 <span className="meta-label">Report hash</span>
