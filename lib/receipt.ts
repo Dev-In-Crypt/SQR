@@ -18,7 +18,6 @@ import {
   receiptNetworkByChainId,
   receiptNetworkForChain,
   requiredReceiptChainId,
-  requiredReceiptNetwork,
   requiredReceiptRpcUrl
 } from "@/lib/base-network";
 import { config } from "@/lib/config";
