@@ -63,6 +63,31 @@ export interface ReportMetadata {
   sourceHash?: string;
 }
 
+// A fingerprint of a verified contract's onchain code at analysis time — the
+// baseline a later drift check compares against. Deliberately outside the
+// deterministic report hash (like AI output): it reflects chain state at
+// generation time, not the reviewed input, and must never affect provenance.
+export interface DeployDriftBaseline {
+  chainId: number;
+  contractAddress: string;
+  bytecodeHash: string;
+  isProxy: boolean;
+  implementationAddress: string | null;
+  implementationBytecodeHash: string | null;
+  capturedAt: string;
+}
+
+export interface DeployDriftCheck {
+  checkedAt: string;
+  drifted: boolean;
+  reason: "IMPLEMENTATION_CHANGED" | "BYTECODE_CHANGED" | "PROXY_STATUS_CHANGED" | "CONTRACT_NOT_FOUND" | null;
+  current: {
+    bytecodeHash: string | null;
+    isProxy: boolean;
+    implementationAddress: string | null;
+  };
+}
+
 export interface ReportPayload {
   executiveSummary: string;
   scannerSummary: string;
@@ -73,6 +98,9 @@ export interface ReportPayload {
   scannerErrors: string[];
   partialReasons: string[];
   reportHash: string;
+  // Present only for BASE_ADDRESS analyses where baseline capture succeeded;
+  // absent for PASTE_CODE, disabled deploy-drift, or a capture failure.
+  deployDriftBaseline?: DeployDriftBaseline | null;
 }
 
 export interface SourceFile {

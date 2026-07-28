@@ -2,6 +2,7 @@ import { Prisma, Severity } from "@prisma/client";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { config } from "@/lib/config";
+import { captureDeployDriftBaseline } from "@/lib/drift";
 import { buildReport } from "@/lib/report";
 import { randomToken, hashPrivateToken } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
@@ -465,6 +466,20 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
 
     assertWithinTotalTimeout(startedAt, "pre_report_generation");
 
+    // Best-effort deploy-drift baseline: only for verified addresses, never
+    // fails/blocks the pipeline on error or timeout — a missing baseline just
+    // means the drift-check feature is unavailable for this report.
+    const deployDriftBaseline =
+      config.deployDriftEnabled && sourceBundle.inputType === "BASE_ADDRESS" && sourceBundle.contractAddress
+        ? await Promise.race([
+            captureDeployDriftBaseline({
+              chainId: sourceBundle.chainId,
+              contractAddress: sourceBundle.contractAddress
+            }),
+            delay(config.DEPLOY_DRIFT_BASELINE_TIMEOUT_MS).then(() => null)
+          ]).catch(() => null)
+        : null;
+
     const { report, topSeverity } = await runWithStageTimeout({
       stage: "report_generation",
       timeoutMs: config.REPORT_GENERATION_TIMEOUT_MS,
@@ -477,6 +492,7 @@ export async function processAnalysisById(analysisId: string): Promise<void> {
           sourceBundle,
           analysisId: analysis.id,
           skipLlm: analysis.mode === "QUICK_SCAN",
+          deployDriftBaseline,
           onExtractingContractStructure: async () => {
             await setPipelineStage(analysis.id, "EXTRACTING_CONTRACT_STRUCTURE");
           },

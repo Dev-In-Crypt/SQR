@@ -232,6 +232,7 @@ export default async function integrationGlobalSetup() {
       // status semantics shift (scanner failure + foundry failure => PARTIAL
       // instead of the warning-only DONE_WITH_WARNINGS these tests encode).
       ENABLE_FOUNDRY_CHECK: "false",
+      ENABLE_DEPLOY_DRIFT: "true",
       SQR_TEST_SOURCE_STUB: "1",
       SQR_TEST_BASESCAN_MAX_ATTEMPTS: "3",
       SQR_TEST_BASESCAN_TOTAL_TIMEOUT_MS: "1500",

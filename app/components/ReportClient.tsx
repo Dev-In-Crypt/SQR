@@ -140,6 +140,26 @@ interface RuntimeConfigResponse {
   };
 }
 
+interface DriftStatusResponse {
+  available: boolean;
+  checked?: boolean;
+  drifted?: boolean;
+  reason?: string | null;
+  baseline?: {
+    chainId: number;
+    contractAddress: string;
+    isProxy: boolean;
+    implementationAddress: string | null;
+    capturedAt: string;
+  };
+  current?: {
+    bytecodeHash: string | null;
+    isProxy: boolean;
+    implementationAddress: string | null;
+  };
+  error?: { code?: string; message?: string };
+}
+
 interface ConfirmPayload {
   txHash: string;
   owner: Address;
@@ -443,6 +463,9 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     deadline: string;
   } | null>(null);
   const [copiedHash, setCopiedHash] = useState(false);
+  const [driftStatus, setDriftStatus] = useState<DriftStatusResponse | null>(null);
+  const [driftBusy, setDriftBusy] = useState(false);
+  const [driftError, setDriftError] = useState<string | null>(null);
 
   function isLikelyInvalidNonceError(error: unknown): boolean {
     const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -621,6 +644,31 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     const receiptConfig = (json as RuntimeConfigResponse).receipt;
     setRuntimeConfig(receiptConfig);
     return receiptConfig;
+  }
+
+  // Read-only, on-demand: does not mutate the report, so no loadReport() refresh.
+  async function checkDeployDrift() {
+    setDriftBusy(true);
+    setDriftError(null);
+    try {
+      const url = `/api/v1/report/${reportId}/drift${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+      const response = await fetch(url, { cache: "no-store" });
+      const json = (await response.json()) as DriftStatusResponse;
+      if (!response.ok) {
+        throw new Error(
+          resolveUserErrorMessage({
+            code: json.error?.code,
+            fallbackMessage: json.error?.message,
+            defaultMessage: "Failed to check deploy drift"
+          })
+        );
+      }
+      setDriftStatus(json);
+    } catch (checkError) {
+      setDriftError(checkError instanceof Error ? checkError.message : String(checkError));
+    } finally {
+      setDriftBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -1274,6 +1322,64 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
               </p>
             </div>
           )}
+
+          {data.report.metadata.contractAddress ? (
+            <div
+              className={`card stack memo-section${driftStatus?.checked && driftStatus.drifted ? " note-panel caution-panel" : ""}`}
+            >
+              <div className="section-eyebrow">Contract Integrity</div>
+              <h2 style={{ margin: 0 }}>Deploy Drift</h2>
+              {driftStatus?.available === false ? (
+                <p className="muted">
+                  No deploy-drift baseline was captured for this report. This check is unavailable for it.
+                </p>
+              ) : !driftStatus ? (
+                <>
+                  <p className="muted">
+                    Checks whether the deployed contract has changed since this review — for example, a proxy upgraded
+                    to a new implementation.
+                  </p>
+                  <div className="action-group">
+                    <button className="button secondary" type="button" disabled={driftBusy} onClick={checkDeployDrift}>
+                      {driftBusy ? "Checking..." : "Check for drift"}
+                    </button>
+                  </div>
+                </>
+              ) : driftStatus.checked === false ? (
+                <>
+                  <p className="muted">Drift check could not reach the chain. Try again shortly.</p>
+                  <div className="action-group">
+                    <button className="button secondary" type="button" disabled={driftBusy} onClick={checkDeployDrift}>
+                      {driftBusy ? "Checking..." : "Retry check"}
+                    </button>
+                  </div>
+                </>
+              ) : driftStatus.drifted ? (
+                <>
+                  <span className="badge HIGH">Drift detected</span>
+                  <p className="muted">
+                    The deployed contract no longer matches what was reviewed
+                    {driftStatus.reason === "IMPLEMENTATION_CHANGED" ? " — the proxy now points to a different implementation." : "."}
+                  </p>
+                  {driftStatus.baseline?.implementationAddress || driftStatus.current?.implementationAddress ? (
+                    <div className="metadata-grid">
+                      <div className="metadata-item stack">
+                        <span className="meta-label">Reviewed implementation</span>
+                        <div className="meta-value mono-wrap">{driftStatus.baseline?.implementationAddress ?? "n/a"}</div>
+                      </div>
+                      <div className="metadata-item stack">
+                        <span className="meta-label">Current implementation</span>
+                        <div className="meta-value mono-wrap">{driftStatus.current?.implementationAddress ?? "n/a"}</div>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <span className="badge LOW">No drift detected</span>
+              )}
+              {driftError ? <div className="error" role="alert">{driftError}</div> : null}
+            </div>
+          ) : null}
 
           <div className="card stack memo-section">
             <div className="section-eyebrow">Key Findings</div>
