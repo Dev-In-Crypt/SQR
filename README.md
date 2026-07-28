@@ -27,6 +27,7 @@ Base is the default network. Arbitrum is available behind the `ENABLE_ARBITRUM` 
 - Deterministic report hashing
 - Optional receipt anchoring flow (EIP-712 signed mint on Base)
 - Deploy-drift monitoring: flags when a reviewed contract's onchain code has changed since the review (e.g. a proxy upgraded to a new implementation) — `GET /api/v1/report/[reportId]/drift`, behind `ENABLE_DEPLOY_DRIFT`
+- Scan-to-scan diff: for a re-analyzed verified contract address, shows what changed since the owner's last review of it (new/resolved findings, severity changes) — `GET /api/v1/report/[reportId]/diff`, owner-only
 - Public receipt verification (`/verify`, `GET /api/v1/verify?hash=`) — checks the hash against the ReceiptRegistry, no account or report content exposed
 - Private-by-default reports with share links and visibility controls
 - Report export: Markdown download and print/PDF (`GET /api/v1/report/[reportId]/export?format=md`)

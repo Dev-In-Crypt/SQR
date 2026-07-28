@@ -3,7 +3,7 @@ import { hashCanonical } from "@/lib/hash";
 import { generateAIAuditFindings, generateExecutiveSummary, localExecutiveSummary } from "@/lib/llm";
 import type { AIAuditFinding, DeployDriftBaseline, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
 
-const severityRank: Record<Severity, number> = {
+export const severityRank: Record<Severity, number> = {
   CRITICAL: 5,
   HIGH: 4,
   MEDIUM: 3,
