@@ -160,6 +160,18 @@ interface DriftStatusResponse {
   error?: { code?: string; message?: string };
 }
 
+interface ScanDiffResponse {
+  available: boolean;
+  reason?: string;
+  previousReport?: { reportId: string; createdAt: string; topSeverity: string };
+  newFindings?: Array<{ title: string; filePath: string | null; severity: string }>;
+  resolvedFindings?: Array<{ title: string; filePath: string | null; severity: string }>;
+  severityChanges?: Array<{ title: string; filePath: string | null; severity: string; previousSeverity?: string }>;
+  unchangedCount?: number;
+  riskIncreased?: boolean;
+  error?: { code?: string; message?: string };
+}
+
 interface ConfirmPayload {
   txHash: string;
   owner: Address;
@@ -466,6 +478,7 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
   const [driftStatus, setDriftStatus] = useState<DriftStatusResponse | null>(null);
   const [driftBusy, setDriftBusy] = useState(false);
   const [driftError, setDriftError] = useState<string | null>(null);
+  const [scanDiff, setScanDiff] = useState<ScanDiffResponse | null>(null);
 
   function isLikelyInvalidNonceError(error: unknown): boolean {
     const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -677,6 +690,32 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportId, token]);
+
+  // Scan diff is DB-only (no RPC), so — unlike deploy-drift — it's cheap enough
+  // to load eagerly rather than gate behind a button. Owner-only and only
+  // meaningful for a verified contract address.
+  useEffect(() => {
+    if (!data?.isOwner || !data.report.metadata.contractAddress) {
+      return;
+    }
+    let active = true;
+    void (async () => {
+      try {
+        const url = `/api/v1/report/${reportId}/diff${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+        const response = await fetch(url, { cache: "no-store" });
+        const json = (await response.json()) as ScanDiffResponse;
+        if (active && response.ok) {
+          setScanDiff(json);
+        }
+      } catch {
+        // Non-fatal: the card simply won't render without a diff.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.isOwner, data?.report.metadata.contractAddress, reportId, token]);
 
   useEffect(() => {
     void fetchRuntimeConfig().catch(() => {
@@ -1378,6 +1417,76 @@ export default function ReportClient({ reportId, token }: { reportId: string; to
                 <span className="badge LOW">No drift detected</span>
               )}
               {driftError ? <div className="error" role="alert">{driftError}</div> : null}
+            </div>
+          ) : null}
+
+          {scanDiff?.available ? (
+            <div className={`card stack memo-section${scanDiff.riskIncreased ? " note-panel caution-panel" : ""}`}>
+              <div className="section-eyebrow">Since Last Review</div>
+              <h2 style={{ margin: 0 }}>Scan Diff</h2>
+              <p className="muted">
+                Compared against the previous review of this contract on{" "}
+                {scanDiff.previousReport ? formatDateTime(scanDiff.previousReport.createdAt) : "an earlier scan"}.
+              </p>
+              <div className="overview-grid">
+                <div className="overview-item stack">
+                  <span className="meta-label">New</span>
+                  <strong className="overview-value">{scanDiff.newFindings?.length ?? 0}</strong>
+                </div>
+                <div className="overview-item stack">
+                  <span className="meta-label">Resolved</span>
+                  <strong className="overview-value">{scanDiff.resolvedFindings?.length ?? 0}</strong>
+                </div>
+                <div className="overview-item stack">
+                  <span className="meta-label">Severity changed</span>
+                  <strong className="overview-value">{scanDiff.severityChanges?.length ?? 0}</strong>
+                </div>
+                <div className="overview-item stack">
+                  <span className="meta-label">Unchanged</span>
+                  <strong className="overview-value">{scanDiff.unchangedCount ?? 0}</strong>
+                </div>
+              </div>
+              {scanDiff.riskIncreased ? <span className="badge HIGH">Risk increased</span> : null}
+              {(scanDiff.newFindings?.length ?? 0) > 0 ? (
+                <div className="stack">
+                  <strong>New findings</strong>
+                  <ul className="scanner-summary-list">
+                    {scanDiff.newFindings!.map((finding, idx) => (
+                      <li key={`new-${idx}`}>
+                        <span className={`badge ${finding.severity}`}>{finding.severity}</span> {finding.title}
+                        {finding.filePath ? ` — ${finding.filePath}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {(scanDiff.resolvedFindings?.length ?? 0) > 0 ? (
+                <div className="stack">
+                  <strong>Resolved findings</strong>
+                  <ul className="scanner-summary-list">
+                    {scanDiff.resolvedFindings!.map((finding, idx) => (
+                      <li key={`resolved-${idx}`}>
+                        <span className={`badge ${finding.severity}`}>{finding.severity}</span> {finding.title}
+                        {finding.filePath ? ` — ${finding.filePath}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {(scanDiff.severityChanges?.length ?? 0) > 0 ? (
+                <div className="stack">
+                  <strong>Severity changes</strong>
+                  <ul className="scanner-summary-list">
+                    {scanDiff.severityChanges!.map((finding, idx) => (
+                      <li key={`sev-${idx}`}>
+                        {finding.title}
+                        {finding.filePath ? ` — ${finding.filePath}` : ""}: {finding.previousSeverity} →{" "}
+                        {finding.severity}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
