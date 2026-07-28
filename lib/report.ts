@@ -1,7 +1,7 @@
 import { config } from "@/lib/config";
 import { hashCanonical } from "@/lib/hash";
 import { generateAIAuditFindings, generateExecutiveSummary, localExecutiveSummary } from "@/lib/llm";
-import type { AIAuditFinding, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
+import type { AIAuditFinding, DeployDriftBaseline, Finding, ReportPayload, Severity, SourceBundle } from "@/lib/types";
 
 const severityRank: Record<Severity, number> = {
   CRITICAL: 5,
@@ -62,6 +62,7 @@ export async function buildReport(params: {
   partialReasons: string[];
   sourceBundle: SourceBundle;
   aiAuditFindings?: AIAuditFinding[];
+  deployDriftBaseline?: DeployDriftBaseline | null;
   analysisId?: string | null;
   skipLlm?: boolean;
   onExtractingContractStructure?: () => Promise<void>;
@@ -139,7 +140,8 @@ export async function buildReport(params: {
       warnings: params.warnings,
       scannerErrors: params.scannerErrors,
       partialReasons: params.partialReasons,
-      reportHash
+      reportHash,
+      deployDriftBaseline: params.deployDriftBaseline ?? null
     },
     topSeverity: topSeverity(sortedFindings)
   };

@@ -21,6 +21,11 @@ const envSchema = z.object({
   ARBITRUM_RPC_URL: z.string().optional(),
   ARBITRUM_SEPOLIA_RPC_URL: z.string().optional(),
   ARBITRUM_RECEIPT_CONTRACT_ADDRESS: z.string().optional(),
+  // Deploy-drift baseline capture for BASE_ADDRESS analyses (STRAT-4). OFF by
+  // default: it's an extra RPC round-trip per address analysis, best-effort and
+  // never fails the pipeline, but no need to pay the RPC cost until it's wanted.
+  ENABLE_DEPLOY_DRIFT: z.string().default("false"),
+  DEPLOY_DRIFT_BASELINE_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
   BASESCAN_API_URL: z.string().url().default("https://api.etherscan.io/v2/api"),
   BASESCAN_API_KEY: z.string().optional(),
   SOURCIFY_API_URL: z
@@ -160,7 +165,8 @@ export function buildConfig(rawEnv: NodeJS.ProcessEnv = process.env) {
     aiConsensusModels: env.OPENAI_CONSENSUS_MODELS.split(",")
       .map((item) => item.trim())
       .filter((item) => item.length > 0),
-    arbitrumEnabled: env.ENABLE_ARBITRUM.toLowerCase() === "true"
+    arbitrumEnabled: env.ENABLE_ARBITRUM.toLowerCase() === "true",
+    deployDriftEnabled: env.ENABLE_DEPLOY_DRIFT.toLowerCase() === "true"
   };
 }
 
