@@ -1,53 +1,26 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { isAddress } from "viem";
+import { FormEvent, useState } from "react";
 
-import { analyzeSnippetCompleteness } from "@/lib/snippet-validation";
+import { InputModeTabs } from "@/app/components/InputModeTabs";
+import { NetworkSelect } from "@/app/components/NetworkSelect";
+import { useAnalysisNetworks } from "@/app/hooks/useAnalysisNetworks";
+import { useSolidityInputValidation, type InputTab } from "@/app/hooks/useSolidityInputValidation";
 import { resolveUserErrorMessage } from "@/lib/ui-error-messages";
-
-type InputTab = "PASTE_CODE" | "BASE_ADDRESS";
 
 const INCOMPLETE_SNIPPET_ERROR = "incomplete snippet, please paste full contract";
 const INVALID_ADDRESS_WARNING = "invalid address, enter a valid 0x contract address";
 
 export default function QuickScanForm() {
-  const [analysisChainId, setAnalysisChainId] = useState(8453);
-  const [networks, setNetworks] = useState<Array<{ chainId: number; label: string }>>([
-    { chainId: 8453, label: "Base" }
-  ]);
+  const { networks, analysisChainId, setAnalysisChainId } = useAnalysisNetworks();
   const [tab, setTab] = useState<InputTab>("PASTE_CODE");
   const [code, setCode] = useState("");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const trimmedCode = code.trim();
-  const trimmedAddress = address.trim();
-  const snippetCompleteness = useMemo(() => analyzeSnippetCompleteness(code), [code]);
-  const snippetIncomplete = !snippetCompleteness.isComplete;
-  const addressInvalid = trimmedAddress.length > 0 && !isAddress(trimmedAddress);
-
-  useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const response = await fetch("/api/v1/config", { cache: "no-store" });
-        if (!response.ok || !active) return;
-        const payload = (await response.json()) as {
-          analysisNetworks?: Array<{ chainId: number; label: string }>;
-        };
-        if (payload.analysisNetworks?.length) {
-          setNetworks(payload.analysisNetworks);
-        }
-      } catch {
-        /* keep Base-only default */
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { trimmedCode, trimmedAddress, snippetIncomplete, addressInvalid, isSubmittable } =
+    useSolidityInputValidation(tab, code, address);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,7 +29,7 @@ export default function QuickScanForm() {
       if (trimmedCode.length === 0) {
         return;
       }
-      if (!analyzeSnippetCompleteness(code).isComplete) {
+      if (snippetIncomplete) {
         setError(INCOMPLETE_SNIPPET_ERROR);
         return;
       }
@@ -64,7 +37,7 @@ export default function QuickScanForm() {
       if (trimmedAddress.length === 0) {
         return;
       }
-      if (!isAddress(trimmedAddress)) {
+      if (addressInvalid) {
         setError(INVALID_ADDRESS_WARNING);
         return;
       }
@@ -119,50 +92,16 @@ export default function QuickScanForm() {
         </div>
       </div>
 
-      {networks.length > 1 ? (
-        <label className="stack home-input-group">
-          <span>Network</span>
-          <select
-            className="select"
-            value={analysisChainId}
-            onChange={(event) => {
-              setAnalysisChainId(Number(event.target.value));
-              setError(null);
-            }}
-          >
-            {networks.map((network) => (
-              <option key={network.chainId} value={network.chainId}>
-                {network.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
+      <NetworkSelect networks={networks} value={analysisChainId} onChange={setAnalysisChainId} />
 
-      <div className="home-tab-row" role="tablist" aria-label="Quick scan input type">
-        <button
-          className={`home-tab ${tab === "PASTE_CODE" ? "is-active" : ""}`}
-          aria-pressed={tab === "PASTE_CODE"}
-          type="button"
-          onClick={() => {
-            setTab("PASTE_CODE");
-            setError(null);
-          }}
-        >
-          Paste code
-        </button>
-        <button
-          className={`home-tab ${tab === "BASE_ADDRESS" ? "is-active" : ""}`}
-          aria-pressed={tab === "BASE_ADDRESS"}
-          type="button"
-          onClick={() => {
-            setTab("BASE_ADDRESS");
-            setError(null);
-          }}
-        >
-          Contract address
-        </button>
-      </div>
+      <InputModeTabs
+        tab={tab}
+        ariaLabel="Quick scan input type"
+        onChange={(next) => {
+          setTab(next);
+          setError(null);
+        }}
+      />
 
       <div className="stack home-tab-panel">
         {tab === "PASTE_CODE" ? (
@@ -203,15 +142,7 @@ export default function QuickScanForm() {
       </div>
 
       <div className="row home-form-actions">
-        <button
-          className="button home-submit-button"
-          type="submit"
-          disabled={
-            busy ||
-            (tab === "PASTE_CODE" && (trimmedCode.length === 0 || snippetIncomplete)) ||
-            (tab === "BASE_ADDRESS" && (trimmedAddress.length === 0 || addressInvalid))
-          }
-        >
+        <button className="button home-submit-button" type="submit" disabled={busy || !isSubmittable}>
           {busy ? "Scanning..." : "Run free quick scan"}
         </button>
       </div>
