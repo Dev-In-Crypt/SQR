@@ -68,6 +68,58 @@ function runtimeWriting(json: unknown): ScannerRuntime {
   };
 }
 
+describe("aderynIssuesToFindings — eth-send-unchecked-address msg.sender downgrade", () => {
+  function ethSendFixture(): Parameters<typeof aderynIssuesToFindings>[0] {
+    return {
+      high_issues: {
+        issues: [
+          {
+            title: "ETH transferred without address checks",
+            detector_name: "eth-send-unchecked-address",
+            description: "Consider introducing checks for `msg.sender`.",
+            instances: [{ contract_path: "SafeVault.sol", line_no: 3 }]
+          }
+        ]
+      }
+    };
+  }
+
+  it("downgrades to LOW when the flagged line sends to msg.sender", () => {
+    const getSourceLine = () => '        (bool sent, ) = msg.sender.call{value: amount}("");';
+    const [finding] = aderynIssuesToFindings(ethSendFixture(), getSourceLine);
+    expect(finding.severity).toBe("LOW");
+    expect(finding.confidence).toBe(55);
+  });
+
+  it("keeps HIGH when the recipient is not literally msg.sender", () => {
+    const getSourceLine = () => "        (bool ok, ) = to.call{value: amount}(\"\");";
+    const [finding] = aderynIssuesToFindings(ethSendFixture(), getSourceLine);
+    expect(finding.severity).toBe("HIGH");
+  });
+
+  it("keeps HIGH when no source line is available (no lookup provided)", () => {
+    const [finding] = aderynIssuesToFindings(ethSendFixture());
+    expect(finding.severity).toBe("HIGH");
+  });
+
+  it("does not downgrade unrelated detectors even on a msg.sender line", () => {
+    const fixture: Parameters<typeof aderynIssuesToFindings>[0] = {
+      high_issues: {
+        issues: [
+          {
+            title: "Reentrancy",
+            detector_name: "reentrancy-state-change",
+            instances: [{ contract_path: "SafeVault.sol", line_no: 3 }]
+          }
+        ]
+      }
+    };
+    const getSourceLine = () => '        (bool sent, ) = msg.sender.call{value: amount}("");';
+    const [finding] = aderynIssuesToFindings(fixture, getSourceLine);
+    expect(finding.severity).toBe("HIGH");
+  });
+});
+
 describe("runAderyn", () => {
   it("parses the report the aderyn command writes", async () => {
     const out = await runAderyn({ sourceBundle: bundle(), runtime: runtimeWriting(fixture), aderynRequired: false });
