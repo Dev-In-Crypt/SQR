@@ -1,5 +1,13 @@
 # Solidity Quick Review
 
+> **Archived, discontinued as of 2026-08-11.** The hosted product
+> (`solidity-scan.com`) is offline and the domain will not be renewed —
+> the project never reached sustainable traffic or revenue, and active
+> development/distribution has stopped. The code stays here, public, for
+> reference. Existing onchain receipts remain independently verifiable
+> without the site — see "Verifying a receipt after the site is down"
+> below.
+
 ## Short product summary
 Solidity Quick Review is an automated Solidity risk-triage product for snippet and verified-contract analysis. It helps teams run fast screening, review structured findings, and decide what needs deeper manual audit. The product is not a formal audit platform and does not provide security certification.
 
@@ -33,6 +41,21 @@ Base is the default network. Arbitrum is available behind the `ENABLE_ARBITRUM` 
 - Report export: Markdown download and print/PDF (`GET /api/v1/report/[reportId]/export?format=md`)
 - Embeddable status badge (`GET /api/v1/badge/[reportId]`, SVG)
 - Rate limits with a paid path (x402 USDC on Base) for analyses above the free daily limit; identical inputs reuse a recent report instead of re-running the pipeline
+
+## Verifying a receipt after the site is down
+The `/verify` page and `/api/v1/verify` endpoint are gone along with the
+hosted app, but the underlying proof is not — receipts were anchored
+onchain specifically so they wouldn't depend on the site staying up.
+
+`ReceiptRegistry` on Base Mainnet: [`0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B`](https://basescan.org/address/0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B)
+
+To check a report hash directly:
+1. Open the contract on [Basescan](https://basescan.org/address/0x15e2D6a335aBBa7374ebeBa5EBD994346E2de35B#readContract).
+2. Call `getByHash(bytes32 reportHash)` with the deterministic report hash
+   (shown on the report page/export at the time it was generated, or in
+   the GitHub Action's PR comment for CI-generated reports).
+3. A non-empty result with a matching hash confirms the report existed
+   and was anchored at that block — independent of this repo or server.
 
 ## Architecture overview
 - Web app (Next.js App Router): input, report, history, receipt UX
