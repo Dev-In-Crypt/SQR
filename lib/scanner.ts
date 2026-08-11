@@ -649,7 +649,20 @@ function toSlitherFinding(detector: SlitherDetector): Finding {
   };
 }
 
-function toAderynFinding(issue: AderynIssue, severity: Severity): Finding {
+// eth-send-unchecked-address fires on any `<addr>.call{value: ...}` whose
+// recipient isn't a hardcoded/state address — including `msg.sender`, which
+// benchmarked as a real false positive (SafeVault/SafeEscrow: caller
+// withdrawing their own already-zeroed balance, return value checked). Unlike
+// an arbitrary/attacker-supplied recipient, a send to msg.sender can only ever
+// move funds to the address that's already calling the function, so this
+// detector's "unvalidated recipient" premise structurally doesn't apply —
+// downgrade rather than drop, so it stays visible instead of silently gone.
+const ETH_SEND_UNCHECKED_ADDRESS_DETECTOR = "eth-send-unchecked-address";
+const MSG_SENDER_CALL_PATTERN = /msg\.sender\s*\.\s*call\b/;
+
+type SourceLineLookup = (filePath: string, line: number | undefined) => string | undefined;
+
+function toAderynFinding(issue: AderynIssue, severity: Severity, getSourceLine?: SourceLineLookup): Finding {
   const instance = issue.instances?.[0];
   const filePath = instance?.contract_path ?? "unknown";
   const line = instance?.line_no;
@@ -662,30 +675,43 @@ function toAderynFinding(issue: AderynIssue, severity: Severity): Finding {
     line
   });
 
+  const effectiveSeverity: Severity =
+    title === ETH_SEND_UNCHECKED_ADDRESS_DETECTOR && MSG_SENDER_CALL_PATTERN.test(getSourceLine?.(filePath, line) ?? "")
+      ? "LOW"
+      : severity;
+
   return {
     id: fingerprint,
     title,
-    severity,
+    severity: effectiveSeverity,
     evidence: [{ filePath, line, excerpt: description }],
     whyItMatters:
       description || "Aderyn flagged this pattern as a risk worth reviewing before deployment.",
     fixDirection: "Review the flagged location and apply the remediation Aderyn describes for this detector.",
     // Aderyn does not emit a per-finding confidence; use a fixed source-tagged value.
-    confidence: severity === "HIGH" ? 75 : 55,
+    confidence: effectiveSeverity === "HIGH" ? 75 : 55,
     needsManualCheck: false,
     fingerprint
   };
 }
 
-export function aderynIssuesToFindings(parsed: AderynJsonOutput): Finding[] {
+export function aderynIssuesToFindings(parsed: AderynJsonOutput, getSourceLine?: SourceLineLookup): Finding[] {
   const findings: Finding[] = [];
   for (const issue of parsed.high_issues?.issues ?? []) {
-    findings.push(toAderynFinding(issue, "HIGH"));
+    findings.push(toAderynFinding(issue, "HIGH", getSourceLine));
   }
   for (const issue of parsed.low_issues?.issues ?? []) {
-    findings.push(toAderynFinding(issue, "LOW"));
+    findings.push(toAderynFinding(issue, "LOW", getSourceLine));
   }
   return findings;
+}
+
+function buildAderynSourceLineLookup(sourceBundle: SourceBundle): SourceLineLookup {
+  const linesByPath = new Map<string, string[]>();
+  sourceBundle.files.forEach((file, index) => {
+    linesByPath.set(normalizeWorkspaceRelativePath(file.path, index), file.content.split("\n"));
+  });
+  return (filePath, line) => (line ? linesByPath.get(filePath)?.[line - 1] : undefined);
 }
 
 // Cyfrin Aderyn — a second static analyzer run alongside Slither so the report
@@ -738,7 +764,11 @@ export async function runAderyn(params: {
       return fail("parse", truncateDiagnostic(error instanceof Error ? error.message : String(error)));
     }
 
-    return { findings: aderynIssuesToFindings(parsed), scannerErrors, warnings };
+    return {
+      findings: aderynIssuesToFindings(parsed, buildAderynSourceLineLookup(params.sourceBundle)),
+      scannerErrors,
+      warnings
+    };
   } catch (error) {
     return fail("exception", truncateDiagnostic(error instanceof Error ? error.message : String(error)));
   } finally {
